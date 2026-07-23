@@ -1,2 +1,2 @@
-# ratemyunit
-A webapp that can be used to rate specific units in Monash Malaysia.
+# emotion_web_app
+App to recognize chloe's sad emotions
