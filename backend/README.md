@@ -52,6 +52,27 @@ cp .env.example .env
 # fill in Supabase URL / service role key / JWT secret
 ```
 
+**Dependencies** (see `requirements.txt`):
+
+```
+fastapi              # web framework / routing
+uvicorn[standard]     # ASGI server that actually runs the app
+python-dotenv         # loads .env into environment variables
+pyjwt                 # verifies Supabase JWTs
+supabase              # Supabase Python client (DB + storage)
+python-multipart      # required by FastAPI for file uploads (UploadFile)
+
+openai-whisper        # speech-to-text
+pydub                 # audio format conversion (webm/opus -> wav)
+torchaudio            # audio loading/resampling to match dataset.py
+soundfile             # audio I/O backend used by torchaudio/pydub
+
+torch                 # model runtime
+transformers          # AutoModel/AutoTokenizer/AutoFeatureExtractor (WavLM, emoberta)
+sentencepiece         # tokenizer backend some HF models need
+numpy                 # array handling
+```
+
 Copy your trained checkpoint into this project:
 
 ```bash
