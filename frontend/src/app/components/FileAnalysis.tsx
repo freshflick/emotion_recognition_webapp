@@ -115,13 +115,28 @@ export function FileAnalysis() {
   }));
 
   return (
-    <div className="p-8">
+    <div className="p-7 bg-background min-h-full">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl mb-2">Audio File Analysis</h1>
-          <p className="text-gray-600">
+        <div className="mb-5">
+          <h1 className="text-2xl font-semibold text-slate-700 dark:text-slate-200 mb-0.5">Audio File Analysis</h1>
+          <p className="text-sm text-slate-400 dark:text-slate-500">
             Upload audio recordings for comprehensive emotion analysis
           </p>
+        </div>
+
+        {/* ML model status signals */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {[
+            { label: "RoBERTa NLP", status: isProcessing ? "processing" : "ready", dot: isProcessing ? "bg-violet-400 animate-pulse" : "bg-emerald-400", text: isProcessing ? "text-violet-500" : "text-emerald-500" },
+            { label: "Speech Encoder", status: isProcessing ? "active" : "standby", dot: isProcessing ? "bg-emerald-400 animate-pulse" : "bg-slate-300 dark:bg-slate-600", text: isProcessing ? "text-emerald-500" : "text-slate-400" },
+            { label: "Fusion Model", status: analysisComplete ? "done" : isProcessing ? "running" : "idle", dot: analysisComplete ? "bg-emerald-400" : isProcessing ? "bg-sky-400 animate-pulse" : "bg-slate-300 dark:bg-slate-600", text: analysisComplete ? "text-emerald-500" : isProcessing ? "text-sky-500" : "text-slate-400" },
+          ].map((s) => (
+            <div key={s.label} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm">
+              <span className={`size-2 rounded-full ${s.dot}`} />
+              <span className="text-xs text-slate-500 dark:text-slate-400">{s.label}</span>
+              <span className={`text-[10px] font-medium ${s.text} capitalize`}>{s.status}</span>
+            </div>
+          ))}
         </div>
 
         {/* File Upload Card */}
