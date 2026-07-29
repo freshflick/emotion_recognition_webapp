@@ -1,18 +1,5 @@
 import { useState } from "react";
 import { Download, Calendar, FileText } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "./ui/button";
@@ -88,26 +75,26 @@ export function Reports() {
 
   const pieData = Object.entries(emotionCounts).map(([emotion, count]) => ({
     name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-    value: count,
+    rp_value: count,
     color: EMOTION_COLORS[emotion as Emotion],
   }));
 
   // Daily breakdown for the period
-  const dailyData: { [date: string]: { sessions: number; avgConfidence: number } } = {};
-  
+  const dailyData: { [date: string]: { rp_sessions: number; avgConfidence: number } } = {};
+
   filteredSessions.forEach((session) => {
     const date = new Date(session.timestamp).toLocaleDateString();
     if (!dailyData[date]) {
-      dailyData[date] = { sessions: 0, avgConfidence: 0 };
+      dailyData[date] = { rp_sessions: 0, avgConfidence: 0 };
     }
-    dailyData[date].sessions++;
+    dailyData[date].rp_sessions++;
     dailyData[date].avgConfidence += session.summary.averageConfidence;
   });
 
   const dailyChartData = Object.entries(dailyData).map(([date, data]) => ({
     date: date.split("/").slice(0, 2).join("/"),
-    sessions: data.sessions,
-    confidence: ((data.avgConfidence / data.sessions) * 100).toFixed(1),
+    rp_sessions: data.rp_sessions,
+    confidence: ((data.avgConfidence / data.rp_sessions) * 100).toFixed(1),
   }));
 
   // Generate PDF Report
@@ -288,52 +275,70 @@ export function Reports() {
 
                 {/* Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  {/* Emotion Distribution */}
+                  {/* Emotion Distribution — CSS bars */}
                   <Card>
                     <CardHeader>
                       <CardTitle>Emotion Distribution</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, value }) =>
-                              totalSessions > 0 ? `${name}: ${value}` : ""
-                            }
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {pieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <div className="space-y-3 pt-1">
+                        {pieData
+                          .sort((a, b) => b.rp_value - a.rp_value)
+                          .map((entry) => {
+                            const pct = totalSessions > 0 ? (entry.rp_value / totalSessions) * 100 : 0;
+                            return (
+                              <div key={entry.name}>
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span className="flex items-center gap-2 capitalize text-foreground/80">
+                                    <span className="size-2.5 rounded-full inline-block flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                                    {entry.name}
+                                  </span>
+                                  <span className="text-muted-foreground tabular-nums">
+                                    {entry.rp_value} ({pct.toFixed(0)}%)
+                                  </span>
+                                </div>
+                                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${pct}%`, backgroundColor: entry.color }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
                     </CardContent>
                   </Card>
 
-                  {/* Daily Breakdown */}
+                  {/* Daily Breakdown — CSS bars */}
                   <Card>
                     <CardHeader>
                       <CardTitle>Daily Breakdown</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={dailyChartData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="sessions" fill="#3b82f6" name="Sessions" />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      {dailyChartData.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-8 text-center">No daily data</p>
+                      ) : (
+                        <div className="space-y-3 pt-1">
+                          {(() => {
+                            const max = Math.max(...dailyChartData.map((d) => d.rp_sessions), 1);
+                            return dailyChartData.map((d) => (
+                              <div key={d.date}>
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span className="text-foreground/80">{d.date}</span>
+                                  <span className="text-muted-foreground tabular-nums">{d.rp_sessions} sessions</span>
+                                </div>
+                                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-all duration-500"
+                                    style={{ width: `${(d.rp_sessions / max) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

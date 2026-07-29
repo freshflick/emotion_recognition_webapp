@@ -40,6 +40,7 @@ type TimeRange = "week" | "month" | "quarter" | "year";
 
 export function Analytics() {
   const [timeRange, setTimeRange] = useState<TimeRange>("week");
+  const [activeTab, setActiveTab] = useState("overview");
   const sessions = getSessions();
 
   // Filter sessions by time range
@@ -146,7 +147,7 @@ export function Analytics() {
       time: new Date(session.timestamp).toLocaleDateString(),
     };
     Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
-      data[emotion] = (value * 100).toFixed(1);
+      data[`an_${emotion}`] = (value * 100).toFixed(1);
     });
     return data;
   });
@@ -239,7 +240,7 @@ export function Analytics() {
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
@@ -249,353 +250,260 @@ export function Analytics() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Emotion Count Bar Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Emotion Count by Type</CardTitle>
-                <CardDescription>
-                  Total occurrences of each emotion in the period
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart id="chart-emotion-count" data={barChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="emotion" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                      {barChartData.map((entry, index) => (
-                        <Cell key={`bar-cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+          {activeTab === "overview" && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Emotion Count by Type</CardTitle>
+                    <CardDescription>Total occurrences of each emotion in the period</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={barChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="emotion" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                          {barChartData.map((entry, index) => (
+                            <Cell key={`bar-cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
 
-            {/* Emotion Distribution Pie Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Emotion Distribution</CardTitle>
-                <CardDescription>
-                  Percentage breakdown of emotions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <PieChart id="chart-emotion-dist">
-                    <Pie
-                      data={pieChartData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) =>
-                        `${name}: ${(percent * 100).toFixed(0)}%`
-                      }
-                      outerRadius={120}
-                      dataKey="value"
-                    >
-                      {pieChartData.map((entry, index) => (
-                        <Cell key={`pie-cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Daily Breakdown Stacked Bar */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Daily Emotion Breakdown</CardTitle>
-              <CardDescription>
-                Emotion occurrences by day
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart id="chart-daily-breakdown" data={dailyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar name="daily-happy" dataKey="happy" stackId="a" fill={EMOTION_COLORS.happy} />
-                  <Bar name="daily-sad" dataKey="sad" stackId="a" fill={EMOTION_COLORS.sad} />
-                  <Bar name="daily-angry" dataKey="angry" stackId="a" fill={EMOTION_COLORS.angry} />
-                  <Bar name="daily-neutral" dataKey="neutral" stackId="a" fill={EMOTION_COLORS.neutral} />
-                  <Bar name="daily-fearful" dataKey="fearful" stackId="a" fill={EMOTION_COLORS.fearful} />
-                  <Bar name="daily-surprised" dataKey="surprised" stackId="a" fill={EMOTION_COLORS.surprised} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Trends Tab */}
-        <TabsContent value="trends" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Emotion Timeline</CardTitle>
-              <CardDescription>
-                How your emotions have changed over sessions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <AreaChart id="chart-timeline" data={timelineData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="session" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Area
-                    name="area-happy"
-                    type="monotone"
-                    dataKey="happy"
-                    stackId="1"
-                    stroke={EMOTION_COLORS.happy}
-                    fill={EMOTION_COLORS.happy}
-                    fillOpacity={0.6}
-                  />
-                  <Area
-                    name="area-sad"
-                    type="monotone"
-                    dataKey="sad"
-                    stackId="1"
-                    stroke={EMOTION_COLORS.sad}
-                    fill={EMOTION_COLORS.sad}
-                    fillOpacity={0.6}
-                  />
-                  <Area
-                    name="area-angry"
-                    type="monotone"
-                    dataKey="angry"
-                    stackId="1"
-                    stroke={EMOTION_COLORS.angry}
-                    fill={EMOTION_COLORS.angry}
-                    fillOpacity={0.6}
-                  />
-                  <Area
-                    name="area-neutral"
-                    type="monotone"
-                    dataKey="neutral"
-                    stackId="1"
-                    stroke={EMOTION_COLORS.neutral}
-                    fill={EMOTION_COLORS.neutral}
-                    fillOpacity={0.6}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Emotion Trends (Line View)</CardTitle>
-              <CardDescription>
-                Individual emotion trends over time
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart id="chart-trends-line" data={timelineData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="session" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    name="line-happy"
-                    type="monotone"
-                    dataKey="happy"
-                    stroke={EMOTION_COLORS.happy}
-                    strokeWidth={3}
-                  />
-                  <Line
-                    name="line-sad"
-                    type="monotone"
-                    dataKey="sad"
-                    stroke={EMOTION_COLORS.sad}
-                    strokeWidth={3}
-                  />
-                  <Line
-                    name="line-angry"
-                    type="monotone"
-                    dataKey="angry"
-                    stroke={EMOTION_COLORS.angry}
-                    strokeWidth={3}
-                  />
-                  <Line
-                    name="line-neutral"
-                    type="monotone"
-                    dataKey="neutral"
-                    stroke={EMOTION_COLORS.neutral}
-                    strokeWidth={3}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Intensity Tab */}
-        <TabsContent value="intensity" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Average Emotion Intensity</CardTitle>
-              <CardDescription>
-                Average strength of each emotion across all sessions
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex justify-center">
-              <ResponsiveContainer width="100%" height={450}>
-                <RadarChart id="chart-radar-intensity" data={radarData}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="emotion" />
-                  <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                  <Radar
-                    name="Intensity"
-                    dataKey="value"
-                    stroke="#3b82f6"
-                    fill="#3b82f6"
-                    fillOpacity={0.6}
-                  />
-                  <Tooltip />
-                  <Legend />
-                </RadarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-2 gap-6">
-            {Object.entries(emotionIntensity).map(([emotion, total]) => (
-              <Card key={emotion}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm capitalize flex items-center gap-2">
-                    <div
-                      className="size-3 rounded-full"
-                      style={{ backgroundColor: EMOTION_COLORS[emotion as Emotion] }}
-                    />
-                    {emotion}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl">
-                    {intensityCount > 0
-                      ? ((total / intensityCount) * 100).toFixed(1)
-                      : "0"}
-                    %
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Average intensity</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        {/* Comparison Tab */}
-        <TabsContent value="comparison" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Positive vs Negative</CardTitle>
-                <CardDescription>
-                  Balance of positive and negative emotions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const positive = emotionCounts.happy + emotionCounts.surprised;
-                  const negative =
-                    emotionCounts.sad + emotionCounts.angry + emotionCounts.fearful;
-                  const neutral = emotionCounts.neutral;
-                  const total = positive + negative + neutral;
-
-                  const comparisonData = [
-                    { name: "Positive", value: positive, color: "#10b981" },
-                    { name: "Negative", value: negative, color: "#ef4444" },
-                    { name: "Neutral", value: neutral, color: "#6b7280" },
-                  ];
-
-                  return (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart id="chart-pos-neg-pie">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Emotion Distribution</CardTitle>
+                    <CardDescription>Percentage breakdown of emotions</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <PieChart>
                         <Pie
-                          data={comparisonData}
+                          data={pieChartData}
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, value }) =>
-                            total > 0
-                              ? `${name}: ${((value / total) * 100).toFixed(0)}%`
-                              : `${name}: 0%`
-                          }
-                          outerRadius={100}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={120}
                           dataKey="value"
                         >
-                          {comparisonData.map((entry, index) => (
-                            <Cell key={`comparison-cell-${index}`} fill={entry.color} />
+                          {pieChartData.map((entry, index) => (
+                            <Cell key={`pie-cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip />
                       </PieChart>
                     </ResponsiveContainer>
-                  );
-                })()}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Emotion Frequency</CardTitle>
-                <CardDescription>
-                  How often each emotion appears
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {Object.entries(emotionCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([emotion, count]) => {
-                      const percentage =
-                        totalSessions > 0 ? (count / totalSessions) * 100 : 0;
-                      return (
-                        <div key={emotion}>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="capitalize flex items-center gap-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Daily Emotion Breakdown</CardTitle>
+                  <CardDescription>Emotion occurrences by day</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={dailyChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="happy" name="Happy" stackId="a" fill={EMOTION_COLORS.happy} />
+                      <Bar dataKey="sad" name="Sad" stackId="a" fill={EMOTION_COLORS.sad} />
+                      <Bar dataKey="angry" name="Angry" stackId="a" fill={EMOTION_COLORS.angry} />
+                      <Bar dataKey="neutral" name="Neutral" stackId="a" fill={EMOTION_COLORS.neutral} />
+                      <Bar dataKey="fearful" name="Fearful" stackId="a" fill={EMOTION_COLORS.fearful} />
+                      <Bar dataKey="surprised" name="Surprised" stackId="a" fill={EMOTION_COLORS.surprised} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* Trends Tab */}
+        <TabsContent value="trends" className="space-y-6">
+          {activeTab === "trends" && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Emotion Timeline</CardTitle>
+                  <CardDescription>How your emotions have changed over sessions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <AreaChart data={timelineData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="session" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Area type="monotone" dataKey="an_happy" name="Happy" stackId="1" stroke={EMOTION_COLORS.happy} fill={EMOTION_COLORS.happy} fillOpacity={0.6} />
+                      <Area type="monotone" dataKey="an_sad" name="Sad" stackId="1" stroke={EMOTION_COLORS.sad} fill={EMOTION_COLORS.sad} fillOpacity={0.6} />
+                      <Area type="monotone" dataKey="an_angry" name="Angry" stackId="1" stroke={EMOTION_COLORS.angry} fill={EMOTION_COLORS.angry} fillOpacity={0.6} />
+                      <Area type="monotone" dataKey="an_neutral" name="Neutral" stackId="1" stroke={EMOTION_COLORS.neutral} fill={EMOTION_COLORS.neutral} fillOpacity={0.6} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Emotion Trends (Line View)</CardTitle>
+                  <CardDescription>Individual emotion trends over time</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={timelineData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="session" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="an_happy" name="Happy" stroke={EMOTION_COLORS.happy} strokeWidth={3} />
+                      <Line type="monotone" dataKey="an_sad" name="Sad" stroke={EMOTION_COLORS.sad} strokeWidth={3} />
+                      <Line type="monotone" dataKey="an_angry" name="Angry" stroke={EMOTION_COLORS.angry} strokeWidth={3} />
+                      <Line type="monotone" dataKey="an_neutral" name="Neutral" stroke={EMOTION_COLORS.neutral} strokeWidth={3} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* Intensity Tab */}
+        <TabsContent value="intensity" className="space-y-6">
+          {activeTab === "intensity" && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Average Emotion Intensity</CardTitle>
+                  <CardDescription>Average strength of each emotion across all sessions</CardDescription>
+                </CardHeader>
+                <CardContent className="flex justify-center">
+                  <ResponsiveContainer width="100%" height={450}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="emotion" />
+                      <PolarRadiusAxis angle={90} domain={[0, 100]} />
+                      <Radar name="Intensity" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                      <Tooltip />
+                      <Legend />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <div className="grid grid-cols-2 gap-6">
+                {Object.entries(emotionIntensity).map(([emotion, total]) => (
+                  <Card key={emotion}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm capitalize flex items-center gap-2">
+                        <div className="size-3 rounded-full" style={{ backgroundColor: EMOTION_COLORS[emotion as Emotion] }} />
+                        {emotion}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl">
+                        {intensityCount > 0 ? ((total / intensityCount) * 100).toFixed(1) : "0"}%
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Average intensity</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        {/* Comparison Tab */}
+        <TabsContent value="comparison" className="space-y-6">
+          {activeTab === "comparison" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Positive vs Negative</CardTitle>
+                  <CardDescription>Balance of positive and negative emotions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const positive = emotionCounts.happy + emotionCounts.surprised;
+                    const negative = emotionCounts.sad + emotionCounts.angry + emotionCounts.fearful;
+                    const neutral = emotionCounts.neutral;
+                    const total = positive + negative + neutral;
+                    const comparisonData = [
+                      { name: "Positive", value: positive, color: "#10b981" },
+                      { name: "Negative", value: negative, color: "#ef4444" },
+                      { name: "Neutral", value: neutral, color: "#6b7280" },
+                    ];
+                    return (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={comparisonData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, value }) => total > 0 ? `${name}: ${((value / total) * 100).toFixed(0)}%` : `${name}: 0%`}
+                            outerRadius={100}
+                            dataKey="value"
+                          >
+                            {comparisonData.map((entry, index) => (
+                              <Cell key={`comparison-cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Emotion Frequency</CardTitle>
+                  <CardDescription>How often each emotion appears</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {Object.entries(emotionCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([emotion, count]) => {
+                        const percentage = totalSessions > 0 ? (count / totalSessions) * 100 : 0;
+                        return (
+                          <div key={emotion}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="capitalize flex items-center gap-2">
+                                <div className="size-3 rounded-full" style={{ backgroundColor: EMOTION_COLORS[emotion as Emotion] }} />
+                                {emotion}
+                              </span>
+                              <span className="font-semibold">{count} ({percentage.toFixed(0)}%)</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                               <div
-                                className="size-3 rounded-full"
-                                style={{
-                                  backgroundColor: EMOTION_COLORS[emotion as Emotion],
-                                }}
+                                className="h-2 rounded-full transition-all"
+                                style={{ width: `${percentage}%`, backgroundColor: EMOTION_COLORS[emotion as Emotion] }}
                               />
-                              {emotion}
-                            </span>
-                            <span className="font-semibold">
-                              {count} ({percentage.toFixed(0)}%)
-                            </span>
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div
-                              className="h-2 rounded-full transition-all"
-                              style={{
-                                width: `${percentage}%`,
-                                backgroundColor: EMOTION_COLORS[emotion as Emotion],
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                        );
+                      })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

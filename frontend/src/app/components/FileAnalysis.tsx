@@ -32,6 +32,20 @@ const EMOTION_COLORS: { [key in Emotion]: string } = {
   fearful: "#a855f7",
   surprised: "#f97316",
 };
+const EMOTION_EMOJI: { [key in Emotion]: string } = {
+  happy: "😊",
+  sad: "😢",
+  angry: "😠",
+  neutral: "😐",
+  fearful: "😨",
+  surprised: "😮",
+};
+
+function getDominantWithScore(scores: { [key in Emotion]: number }) {
+  const entries = Object.entries(scores) as [Emotion, number][];
+  const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
+  return { emotion: dominant[0], confidence: dominant[1] };
+}
 
 export function FileAnalysis() {
   const navigate = useNavigate();
@@ -106,12 +120,12 @@ export function FileAnalysis() {
 
   const chartData = emotionData.map((data) => ({
     time: `${data.timestamp}s`,
-    happy: (data.fused.happy * 100).toFixed(1),
-    sad: (data.fused.sad * 100).toFixed(1),
-    angry: (data.fused.angry * 100).toFixed(1),
-    neutral: (data.fused.neutral * 100).toFixed(1),
-    fearful: (data.fused.fearful * 100).toFixed(1),
-    surprised: (data.fused.surprised * 100).toFixed(1),
+    fa_happy: (data.fused.happy * 100).toFixed(1),
+    fa_sad: (data.fused.sad * 100).toFixed(1),
+    fa_angry: (data.fused.angry * 100).toFixed(1),
+    fa_neutral: (data.fused.neutral * 100).toFixed(1),
+    fa_fearful: (data.fused.fearful * 100).toFixed(1),
+    fa_surprised: (data.fused.surprised * 100).toFixed(1),
   }));
 
   return (
@@ -218,6 +232,126 @@ export function FileAnalysis() {
           </CardContent>
         </Card>
 
+        {/* Real-Time Emotion Prediction Panel */}
+        {(isProcessing || analysisComplete) && (() => {
+          const hasData = emotionData.length > 0;
+          const current = hasData ? emotionData[emotionData.length - 1] : null;
+          const audioResult = current ? getDominantWithScore(current.audio) : null;
+          const textResult = current ? getDominantWithScore(current.text) : null;
+          const fusedResult = current ? getDominantWithScore(current.fused) : null;
+
+          return (
+            <div className="rounded-xl border border-border bg-card shadow-sm p-5 mb-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-5">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                  Real-Time Emotion Prediction
+                </span>
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                  <span className={`size-1.5 rounded-full ${isProcessing ? "bg-primary animate-pulse" : "bg-emerald-400"}`} />
+                  <span className={isProcessing ? "text-primary" : "text-emerald-500"}>
+                    {isProcessing ? "Analyzing" : "Complete"}
+                  </span>
+                </span>
+              </div>
+
+              {/* Column labels */}
+              <div className="grid grid-cols-3 gap-3 mb-2">
+                <span className="text-sm font-semibold text-foreground">Audio Emotion</span>
+                <span className="text-sm font-semibold text-foreground">Text Emotion</span>
+                <span className="text-sm font-semibold text-foreground">Fused Output (R20)</span>
+              </div>
+
+              {/* Columns */}
+              <div className="grid grid-cols-3 gap-3">
+                {/* Audio */}
+                <div className="rounded-lg border border-dashed border-border bg-muted/40 flex flex-col items-center justify-center py-7 gap-1.5 min-h-[120px]">
+                  {audioResult ? (
+                    <>
+                      <span className="text-2xl mb-0.5">{EMOTION_EMOJI[audioResult.emotion]}</span>
+                      <span className="text-sm font-semibold capitalize" style={{ color: EMOTION_COLORS[audioResult.emotion] }}>
+                        {audioResult.emotion}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Confidence: <span className="font-medium text-foreground">{(audioResult.confidence * 100).toFixed(0)}%</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/40 mt-0.5">60% weight</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg font-semibold text-muted-foreground/50 mb-0.5">--</span>
+                      <span className="text-xs text-muted-foreground/50">Confidence: --%</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Text */}
+                <div className="rounded-lg border border-dashed border-border bg-muted/40 flex flex-col items-center justify-center py-7 gap-1.5 min-h-[120px]">
+                  {textResult ? (
+                    <>
+                      <span className="text-2xl mb-0.5">{EMOTION_EMOJI[textResult.emotion]}</span>
+                      <span className="text-sm font-semibold capitalize" style={{ color: EMOTION_COLORS[textResult.emotion] }}>
+                        {textResult.emotion}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Confidence: <span className="font-medium text-foreground">{(textResult.confidence * 100).toFixed(0)}%</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/40 mt-0.5">40% weight</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg font-semibold text-muted-foreground/50 mb-0.5">--</span>
+                      <span className="text-xs text-muted-foreground/50">Confidence: --%</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Fused */}
+                <div className="rounded-lg border border-border bg-muted/60 flex flex-col items-center justify-center py-7 gap-1.5 min-h-[120px]">
+                  {fusedResult ? (
+                    <>
+                      <span className="text-2xl mb-0.5">{EMOTION_EMOJI[fusedResult.emotion]}</span>
+                      <span className="text-sm font-bold capitalize" style={{ color: EMOTION_COLORS[fusedResult.emotion] }}>
+                        {fusedResult.emotion}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Confidence: <span className="font-semibold text-foreground">{(fusedResult.confidence * 100).toFixed(0)}%</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/40 mt-0.5">Fused · final</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg font-semibold text-muted-foreground/50 mb-0.5">--</span>
+                      <span className="text-xs text-muted-foreground/50">Confidence: --%</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Fused score breakdown — only when data available */}
+              {current && (
+                <div className="mt-4 space-y-2">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Fused Score Breakdown</span>
+                  {(Object.entries(current.fused) as [Emotion, number][])
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([emotion, value]) => (
+                    <div key={emotion} className="flex items-center gap-2.5">
+                      <span className="text-xs w-16 capitalize text-muted-foreground">{emotion}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${(value * 100).toFixed(1)}%`, backgroundColor: EMOTION_COLORS[emotion] }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground tabular-nums w-8 text-right">{(value * 100).toFixed(0)}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Analysis Results */}
         {analysisComplete && emotionData.length > 0 && (
           <>
@@ -269,42 +403,12 @@ export function FileAnalysis() {
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="happy"
-                      stroke={EMOTION_COLORS.happy}
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="sad"
-                      stroke={EMOTION_COLORS.sad}
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="angry"
-                      stroke={EMOTION_COLORS.angry}
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="neutral"
-                      stroke={EMOTION_COLORS.neutral}
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="fearful"
-                      stroke={EMOTION_COLORS.fearful}
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="surprised"
-                      stroke={EMOTION_COLORS.surprised}
-                      strokeWidth={2}
-                    />
+                    <Line type="monotone" dataKey="fa_happy" name="Happy" stroke={EMOTION_COLORS.happy} strokeWidth={2} />
+                    <Line type="monotone" dataKey="fa_sad" name="Sad" stroke={EMOTION_COLORS.sad} strokeWidth={2} />
+                    <Line type="monotone" dataKey="fa_angry" name="Angry" stroke={EMOTION_COLORS.angry} strokeWidth={2} />
+                    <Line type="monotone" dataKey="fa_neutral" name="Neutral" stroke={EMOTION_COLORS.neutral} strokeWidth={2} />
+                    <Line type="monotone" dataKey="fa_fearful" name="Fearful" stroke={EMOTION_COLORS.fearful} strokeWidth={2} />
+                    <Line type="monotone" dataKey="fa_surprised" name="Surprised" stroke={EMOTION_COLORS.surprised} strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
