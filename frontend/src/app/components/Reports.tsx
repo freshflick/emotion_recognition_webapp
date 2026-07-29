@@ -206,7 +206,7 @@ export function Reports() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background min-h-full">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex items-start justify-between">
           <div>

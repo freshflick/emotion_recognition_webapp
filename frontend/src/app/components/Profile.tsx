@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { User, Mail, Calendar, Edit2, Save } from "lucide-react";
+import { useState, useRef } from "react";
+import { User, Mail, Calendar, Edit2, Save, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -13,6 +13,7 @@ import { getSessions } from "../utils/emotionEngine";
 export function Profile() {
   const { user, updateUserProfile } = useUser();
   const [isEditing, setIsEditing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: user.name,
     email: user.email,
@@ -97,28 +98,53 @@ export function Profile() {
           <CardContent>
             <div className="flex flex-col md:flex-row gap-6">
               {/* Avatar */}
-              <div className="flex flex-col items-center gap-4">
-                <Avatar className="size-32">
-                  <AvatarImage src={formData.avatar} />
-                  <AvatarFallback className="text-3xl">
-                    {formData.name.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+              <div className="flex flex-col items-center gap-3">
+                <div className="relative group">
+                  <Avatar className="size-32">
+                    <AvatarImage src={formData.avatar} />
+                    <AvatarFallback className="text-3xl">
+                      {formData.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 rounded-full flex flex-col items-center justify-center gap-1 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    >
+                      <Upload className="size-5 text-white" />
+                      <span className="text-[10px] text-white font-medium">Upload</span>
+                    </button>
+                  )}
+                </div>
                 {isEditing && (
-                  <div className="w-full">
-                    <Label htmlFor="avatar" className="text-xs">
-                      Avatar URL
-                    </Label>
-                    <Input
-                      id="avatar"
-                      value={formData.avatar}
-                      onChange={(e) =>
-                        setFormData({ ...formData, avatar: e.target.value })
-                      }
-                      placeholder="https://..."
-                      className="mt-1"
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setFormData({ ...formData, avatar: ev.target?.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
                     />
-                  </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="size-3.5 mr-1.5" />
+                      Choose Photo
+                    </Button>
+                  </>
                 )}
               </div>
 

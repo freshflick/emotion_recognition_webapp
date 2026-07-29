@@ -1,21 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import { Activity, Clock, Brain, Sparkles } from "lucide-react";
+import { Activity, Clock, Brain, Sparkles, Mic, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { useUser } from "../contexts/UserContext";
@@ -25,11 +14,11 @@ import type { Emotion } from "../utils/emotionEngine";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#f59e0b",
-  sad: "#3b82f6",
-  angry: "#ef4444",
-  neutral: "#6b7280",
-  fearful: "#a855f7",
-  surprised: "#f97316",
+  sad: "#6ea8fe",
+  angry: "#f87171",
+  neutral: "#a0a0c0",
+  fearful: "#c084fc",
+  surprised: "#fb923c",
 };
 
 export function Dashboard() {
@@ -39,9 +28,7 @@ export function Dashboard() {
   const [greeting] = useState(getTimeBasedGreeting());
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSessions(getSessions());
-    }, 5000);
+    const interval = setInterval(() => setSessions(getSessions()), 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -53,14 +40,8 @@ export function Dashboard() {
       : 0;
 
   const emotionDistribution: { [key in Emotion]: number } = {
-    happy: 0,
-    sad: 0,
-    angry: 0,
-    neutral: 0,
-    fearful: 0,
-    surprised: 0,
+    happy: 0, sad: 0, angry: 0, neutral: 0, fearful: 0, surprised: 0,
   };
-
   sessions.forEach((session) => {
     Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
       emotionDistribution[emotion as Emotion] += value;
@@ -69,202 +50,177 @@ export function Dashboard() {
 
   const pieData = Object.entries(emotionDistribution).map(([emotion, value]) => ({
     name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-    value: value,
+    value,
     color: EMOTION_COLORS[emotion as Emotion],
   }));
 
   const timelineData = sessions.slice(0, 10).reverse().map((session, index) => ({
     name: `S${index + 1}`,
-    confidence: (session.summary.averageConfidence * 100).toFixed(1),
-    duration: session.duration,
+    confidence: parseFloat((session.summary.averageConfidence * 100).toFixed(1)),
   }));
 
   const trendData = sessions.slice(0, 8).reverse().map((session, index) => {
-    const data: any = { name: `Session ${index + 1}` };
+    const data: any = { name: `S${index + 1}` };
     Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
-      data[emotion] = (value * 100).toFixed(1);
+      data[emotion] = parseFloat((value * 100).toFixed(1));
     });
     return data;
   });
 
+  const tooltipStyle = {
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: "10px",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+    color: "var(--card-foreground)",
+    fontSize: 12,
+  };
+
   return (
-    <div className="p-8">
-      {/* Greeting Section */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2 text-gray-900 dark:text-white">
+    <div className="p-7 min-h-full bg-background">
+
+      {/* Greeting */}
+      <div className="mb-5">
+        <h1 className="text-2xl font-semibold text-foreground mb-0.5">
           {greeting}, {user.name}!
         </h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          Welcome back to your emotion monitoring dashboard
+        <p className="text-sm text-muted-foreground">
+          Your emotion monitoring dashboard is live and ready.
         </p>
       </div>
 
-      {/* Motivational Quote Card */}
-      <Card className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-100 dark:border-blue-800">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-              <Sparkles className="size-6 text-blue-600 dark:text-blue-400" />
+      {/* System status pill */}
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm">
+          <span className="size-2 rounded-full bg-emerald-400 inline-block" />
+          <span className="text-xs text-muted-foreground">All systems online</span>
+        </div>
+      </div>
+
+      {/* Quote Card */}
+      <Card className="mb-6 border-border bg-muted/40">
+        <CardContent className="py-4 px-5">
+          <div className="flex items-start gap-3">
+            <div className="p-1.5 bg-accent rounded-lg flex-shrink-0 mt-0.5">
+              <Sparkles className="size-4 text-primary" />
             </div>
-            <div className="flex-1">
-              <p className="text-lg italic mb-2 text-gray-800 dark:text-gray-200">
-                "{quote.text}"
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">— {quote.author}</p>
+            <div>
+              <p className="text-sm italic text-foreground/80 leading-relaxed">"{quote.text}"</p>
+              <p className="text-xs text-muted-foreground mt-1">— {quote.author}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Overview Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-1">Overview</h2>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">
-          Real-time multimodal emotion analysis with audio-text fusion
-        </p>
-      </div>
-
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-2 gap-3 mb-6">
         <Link to="/live">
-          <Button className="w-full h-20 text-lg bg-blue-600 hover:bg-blue-700" size="lg">
-            <Activity className="size-5 mr-2" />
+          <Button className="w-full h-16 bg-primary hover:bg-primary/90 text-primary-foreground gap-2 shadow-sm" size="lg">
+            <Mic className="size-4" />
             Start Live Recording
           </Button>
         </Link>
         <Link to="/upload">
-          <Button className="w-full h-20 text-lg" variant="outline" size="lg">
-            <svg className="size-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
+          <Button className="w-full h-16 gap-2 border-border bg-card text-foreground hover:bg-accent" variant="outline" size="lg">
+            <Upload className="size-4" />
             Upload Audio File
           </Button>
         </Link>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Sessions</CardTitle>
-            <Activity className="size-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">{totalSessions}</div>
-            <p className="text-xs text-gray-500 mt-1">Across all time periods</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Duration</CardTitle>
-            <Clock className="size-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">{Math.round(totalDuration / 60)}m</div>
-            <p className="text-xs text-gray-500 mt-1">Minutes analyzed</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Confidence</CardTitle>
-            <Brain className="size-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">{(avgConfidence * 100).toFixed(1)}%</div>
-            <p className="text-xs text-gray-500 mt-1">Model accuracy</p>
-          </CardContent>
-        </Card>
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {[
+          { label: "Total Sessions", value: totalSessions, sub: "All time", icon: Activity, iconBg: "bg-primary/10", iconColor: "text-primary" },
+          { label: "Total Duration", value: `${Math.round(totalDuration / 60)}m`, sub: "Minutes analyzed", icon: Clock, iconBg: "bg-emerald-500/10", iconColor: "text-emerald-500" },
+          { label: "Avg Confidence", value: `${(avgConfidence * 100).toFixed(1)}%`, sub: "Model accuracy", icon: Brain, iconBg: "bg-primary/10", iconColor: "text-primary" },
+        ].map(({ label, value, sub, icon: Icon, iconBg, iconColor }) => (
+          <Card key={label} className="border-border bg-card">
+            <CardContent className="pt-5 pb-4 px-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                  <div className="text-2xl font-semibold text-foreground">{value}</div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+                </div>
+                <div className={`p-2 rounded-xl ${iconBg}`}>
+                  <Icon className={`size-4 ${iconColor}`} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
+      {/* Charts */}
       {sessions.length === 0 ? (
-        <Card className="p-12 text-center">
-          <Brain className="size-16 mx-auto mb-4 text-gray-300" />
-          <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">No sessions yet</h3>
-          <p className="text-gray-500 mb-6">
-            Start a live recording or upload an audio file to begin analyzing emotions
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Link to="/live">
-              <Button className="bg-blue-600 hover:bg-blue-700">Start Live Recording</Button>
-            </Link>
-            <Link to="/upload">
-              <Button variant="outline">Upload File</Button>
-            </Link>
-          </div>
+        <Card className="border-border bg-card">
+          <CardContent className="py-16 text-center">
+            <div className="size-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+              <Brain className="size-6 text-muted-foreground" />
+            </div>
+            <h3 className="text-base font-medium text-foreground mb-2">No sessions yet</h3>
+            <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
+              Start a live recording or upload an audio file to begin analyzing emotions
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Link to="/live"><Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm">Start Live Recording</Button></Link>
+              <Link to="/upload"><Button variant="outline" className="text-sm border-border">Upload File</Button></Link>
+            </div>
+          </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Emotion Distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Emotion Distribution</CardTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2 px-5 pt-5">
+              <CardTitle className="text-sm font-semibold text-foreground">Emotion Distribution</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
+            <CardContent className="px-5 pb-5">
+              <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) =>
-                      `${name}: ${(percent * 100).toFixed(0)}%`
-                    }
-                    outerRadius={100}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
+                  <Pie data={pieData} cx="50%" cy="50%" labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={90} dataKey="value">
+                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={tooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Confidence Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Sessions Confidence</CardTitle>
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2 px-5 pt-5">
+              <CardTitle className="text-sm font-semibold text-foreground">Session Confidence</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={timelineData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="confidence" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            <CardContent className="px-5 pb-5">
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={timelineData} margin={{ left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                  <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="confidence" fill="var(--primary)" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Emotion Trends */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Emotion Trends Over Sessions</CardTitle>
+          <Card className="border-border bg-card lg:col-span-2">
+            <CardHeader className="pb-2 px-5 pt-5">
+              <CardTitle className="text-sm font-semibold text-foreground">Emotion Trends</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="happy" stroke={EMOTION_COLORS.happy} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="sad" stroke={EMOTION_COLORS.sad} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="angry" stroke={EMOTION_COLORS.angry} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="neutral" stroke={EMOTION_COLORS.neutral} strokeWidth={2} dot={false} />
+            <CardContent className="px-5 pb-5">
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={trendData} margin={{ left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                  <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {(["happy", "sad", "angry", "neutral"] as Emotion[]).map((e) => (
+                    <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={2} dot={false} />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>

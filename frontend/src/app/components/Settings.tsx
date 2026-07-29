@@ -1,58 +1,37 @@
 import { useState } from "react";
 import { useTheme } from "next-themes";
-import {
-  Settings as SettingsIcon,
-  User,
-  Lock,
-  Palette,
-  Bell,
-  Shield,
-  Trash2,
-  Moon,
-  Sun,
-  Monitor,
-} from "lucide-react";
+import { Check, User, Lock, Palette, Moon, Sun, Monitor, ShieldCheck, ShieldOff } from "lucide-react";
+import { useAccent, type AccentColor } from "../contexts/AccentContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "./ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "./ui/dialog";
 import { useUser } from "../contexts/UserContext";
 import { toast } from "sonner";
+
+const TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+const TOTP_ISSUER = "EmotionMonitor";
+const TOTP_URI = `otpauth://totp/${TOTP_ISSUER}:user%40example.com?secret=${TOTP_SECRET}&issuer=${TOTP_ISSUER}`;
+const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(TOTP_URI)}`;
 
 export function Settings() {
   const { user, updateUserProfile } = useUser();
   const { theme, setTheme } = useTheme();
+  const { accent, setAccent } = useAccent();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  // Notification settings (stored in user profile)
-  const [notifications, setNotifications] = useState({
-    emailNotifications: true,
-    sessionReminders: true,
-    weeklyReports: true,
-    analysisAlerts: false,
-  });
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+  const [showQRDialog, setShowQRDialog] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
 
   const handleChangePassword = () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -75,12 +54,6 @@ export function Settings() {
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
-  };
-
-  const handleClearData = () => {
-    localStorage.clear();
-    toast.success("All data cleared successfully");
-    window.location.reload();
   };
 
   return (
@@ -106,10 +79,6 @@ export function Settings() {
             <TabsTrigger value="appearance">
               <Palette className="size-4 mr-2" />
               Appearance
-            </TabsTrigger>
-            <TabsTrigger value="notifications">
-              <Bell className="size-4 mr-2" />
-              Notifications
             </TabsTrigger>
           </TabsList>
 
@@ -150,54 +119,6 @@ export function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Data & Privacy</CardTitle>
-                <CardDescription>
-                  Manage your data and privacy settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Export Data</div>
-                    <p className="text-sm text-gray-500">
-                      Download all your session data and analytics
-                    </p>
-                  </div>
-                  <Button variant="outline" onClick={() => toast.info("Feature coming soon")}>
-                    Export
-                  </Button>
-                </div>
-
-                <div className="border-t pt-4">
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" className="w-full">
-                        <Trash2 className="size-4 mr-2" />
-                        Clear All Data
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This action cannot be undone. This will permanently delete all
-                          your session data, analytics, and profile information from this
-                          device.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearData}>
-                          Yes, clear all data
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* Security Tab */}
@@ -262,17 +183,114 @@ export function Settings() {
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium">Enable 2FA</div>
-                    <p className="text-sm text-gray-500">
-                      Protect your account with two-factor authentication
+                    <div className="font-medium flex items-center gap-2">
+                      Authenticator App
+                      {twoFAEnabled && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-2 py-0.5 rounded-full">
+                          <span className="size-1.5 rounded-full bg-emerald-500 inline-block" />
+                          Enabled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {twoFAEnabled
+                        ? "Your account is protected with an authenticator app."
+                        : "Use Google Authenticator, Authy, or similar to generate login codes."}
                     </p>
                   </div>
-                  <Switch
-                    onCheckedChange={() => toast.info("Feature coming soon")}
-                  />
+                  {twoFAEnabled ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        setTwoFAEnabled(false);
+                        toast.success("Two-factor authentication disabled");
+                      }}
+                    >
+                      <ShieldOff className="size-3.5 mr-1.5" />
+                      Disable
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setVerifyCode(""); setShowQRDialog(true); }}
+                    >
+                      <ShieldCheck className="size-3.5 mr-1.5" />
+                      Set Up 2FA
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
+
+            {/* 2FA QR Dialog */}
+            <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Set Up Two-Factor Authentication</DialogTitle>
+                  <DialogDescription>
+                    Scan the QR code with your authenticator app, then enter the 6-digit code to confirm.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex gap-6 py-2">
+                  {/* Left: QR code */}
+                  <div className="flex-shrink-0 flex flex-col items-center gap-3">
+                    <div className="p-3 rounded-xl border border-border bg-white shadow-sm">
+                      <img
+                        src={QR_URL}
+                        alt="TOTP QR code"
+                        width={180}
+                        height={180}
+                        className="block"
+                      />
+                    </div>
+                    <div className="rounded-lg bg-muted px-3 py-2 text-center w-full">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 font-semibold">Manual key</p>
+                      <code className="text-xs font-mono tracking-widest text-foreground select-all">{TOTP_SECRET}</code>
+                    </div>
+                  </div>
+
+                  {/* Right: instructions + verify */}
+                  <div className="flex-1 flex flex-col justify-between gap-4">
+                    <ol className="text-sm text-muted-foreground space-y-3 list-decimal list-inside">
+                      <li>Open your authenticator app<br /><span className="text-xs text-muted-foreground/60">(Google Authenticator, Authy, 1Password, etc.)</span></li>
+                      <li>Tap <strong className="text-foreground">"Add account"</strong> and scan the QR code</li>
+                      <li>Enter the 6-digit code shown in the app below</li>
+                    </ol>
+
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="totp-verify">Verification Code</Label>
+                        <Input
+                          id="totp-verify"
+                          placeholder="000000"
+                          maxLength={6}
+                          value={verifyCode}
+                          onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                          className="text-center text-xl font-mono tracking-[0.5em]"
+                        />
+                      </div>
+
+                      <Button
+                        className="w-full"
+                        disabled={verifyCode.length !== 6}
+                        onClick={() => {
+                          setTwoFAEnabled(true);
+                          setShowQRDialog(false);
+                          toast.success("Two-factor authentication enabled");
+                        }}
+                      >
+                        <ShieldCheck className="size-4 mr-2" />
+                        Verify &amp; Enable
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Card>
               <CardHeader>
@@ -283,15 +301,18 @@ export function Settings() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-[#f5f5fc] dark:bg-[#28284a] rounded-xl">
                     <div>
-                      <div className="font-medium">Current Device</div>
-                      <p className="text-sm text-gray-500">
-                        {navigator.userAgent.includes("Mac") ? "MacOS" : "Windows"} •{" "}
+                      <div className="font-medium text-slate-700 dark:text-slate-200">Current Device</div>
+                      <p className="text-sm text-slate-400">
+                        {navigator.userAgent.includes("Mac") ? "MacOS" : "Windows"} ·{" "}
                         {navigator.userAgent.includes("Chrome") ? "Chrome" : "Browser"}
                       </p>
                     </div>
-                    <div className="text-xs text-green-600 font-medium">Active Now</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-emerald-400" />
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Active Now</span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -300,164 +321,108 @@ export function Settings() {
 
           {/* Appearance Tab */}
           <TabsContent value="appearance" className="space-y-6">
+            {/* Light / Dark */}
             <Card>
               <CardHeader>
-                <CardTitle>Theme</CardTitle>
-                <CardDescription>
-                  Customize the appearance of the application
-                </CardDescription>
+                <CardTitle>Mode</CardTitle>
+                <CardDescription>Choose your preferred light or dark mode</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Color Theme</Label>
-                  <div className="grid grid-cols-3 gap-4 mt-2">
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { value: "light", icon: Sun, label: "Light" },
+                    { value: "dark", icon: Moon, label: "Dark" },
+                    { value: "system", icon: Monitor, label: "System" },
+                  ].map(({ value, icon: Icon, label }) => (
                     <button
-                      onClick={() => setTheme("light")}
-                      className={`flex flex-col items-center gap-2 p-4 border-2 rounded-lg transition-all ${
-                        theme === "light"
-                          ? "border-blue-600 bg-blue-50 dark:bg-blue-950"
-                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                      key={value}
+                      onClick={() => setTheme(value)}
+                      className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                        theme === value
+                          ? "border-primary bg-accent text-accent-foreground"
+                          : "border-transparent bg-muted hover:bg-accent/50 text-muted-foreground"
                       }`}
                     >
-                      <Sun className="size-6" />
-                      <span className="text-sm font-medium">Light</span>
+                      {theme === value && (
+                        <span className="absolute top-2 right-2 size-4 rounded-full bg-primary flex items-center justify-center">
+                          <Check className="size-2.5 text-primary-foreground" />
+                        </span>
+                      )}
+                      <Icon className="size-5" />
+                      <span className="text-sm font-medium">{label}</span>
                     </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
+            {/* Accent color */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Accent Color</CardTitle>
+                <CardDescription>Pick a color that appears on buttons, active items, and highlights</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                  {([
+                    { id: "violet", label: "Violet", swatch: "#7c7cf0", ring: "#7c7cf0" },
+                    { id: "green",  label: "Green",  swatch: "#3ecf8e", ring: "#3ecf8e" },
+                    { id: "blue",   label: "Blue",   swatch: "#3b82f6", ring: "#3b82f6" },
+                    { id: "orange", label: "Orange", swatch: "#f97316", ring: "#f97316" },
+                    { id: "red",    label: "Red",    swatch: "#ef4444", ring: "#ef4444" },
+                    { id: "amber",  label: "Amber",  swatch: "#f59e0b", ring: "#f59e0b" },
+                  ] as { id: AccentColor; label: string; swatch: string; ring: string }[]).map(({ id, label, swatch }) => (
                     <button
-                      onClick={() => setTheme("dark")}
-                      className={`flex flex-col items-center gap-2 p-4 border-2 rounded-lg transition-all ${
-                        theme === "dark"
-                          ? "border-blue-600 bg-blue-50 dark:bg-blue-950"
-                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                      key={id}
+                      onClick={() => setAccent(id)}
+                      className={`relative flex flex-col items-center gap-2.5 p-3 rounded-xl border-2 transition-all ${
+                        accent === id
+                          ? "border-[var(--swatch)] bg-muted"
+                          : "border-transparent bg-muted hover:bg-accent/40"
                       }`}
+                      style={{ "--swatch": swatch } as React.CSSProperties}
                     >
-                      <Moon className="size-6" />
-                      <span className="text-sm font-medium">Dark</span>
+                      <span
+                        className="size-8 rounded-full shadow-sm flex items-center justify-center"
+                        style={{ backgroundColor: swatch }}
+                      >
+                        {accent === id && <Check className="size-4 text-white drop-shadow" />}
+                      </span>
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
                     </button>
-
-                    <button
-                      onClick={() => setTheme("system")}
-                      className={`flex flex-col items-center gap-2 p-4 border-2 rounded-lg transition-all ${
-                        theme === "system"
-                          ? "border-blue-600 bg-blue-50 dark:bg-blue-950"
-                          : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      <Monitor className="size-6" />
-                      <span className="text-sm font-medium">System</span>
-                    </button>
-                  </div>
+                  ))}
                 </div>
 
-                <div className="border-t pt-4">
-                  <Label>Display Preferences</Label>
-                  <div className="space-y-3 mt-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium">Compact Mode</div>
-                        <p className="text-xs text-gray-500">Reduce spacing and padding</p>
-                      </div>
-                      <Switch onCheckedChange={() => toast.info("Feature coming soon")} />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium">High Contrast</div>
-                        <p className="text-xs text-gray-500">
-                          Increase contrast for better visibility
-                        </p>
-                      </div>
-                      <Switch onCheckedChange={() => toast.info("Feature coming soon")} />
-                    </div>
+                {/* Preview strip */}
+                <div className="mt-5 p-4 rounded-xl bg-background border border-border">
+                  <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wider">Live Preview</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button className="px-4 py-1.5 rounded-lg text-sm font-medium bg-primary text-primary-foreground">
+                      Primary button
+                    </button>
+                    <button className="px-4 py-1.5 rounded-lg text-sm font-medium bg-card border border-border text-foreground">
+                      Secondary
+                    </button>
+                    <span className="flex items-center gap-1.5 text-sm text-primary font-medium">
+                      <span className="size-2 rounded-full inline-block bg-primary" />
+                      Active link
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground">
+                      Badge
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                      Muted
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="size-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs text-muted-foreground">Background & sidebar update automatically</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Preferences</CardTitle>
-                <CardDescription>
-                  Choose what notifications you want to receive
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Email Notifications</div>
-                    <p className="text-sm text-gray-500">
-                      Receive email updates about your account
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.emailNotifications}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, emailNotifications: checked })
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Session Reminders</div>
-                    <p className="text-sm text-gray-500">
-                      Get reminded to complete your daily sessions
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.sessionReminders}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, sessionReminders: checked })
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Weekly Reports</div>
-                    <p className="text-sm text-gray-500">
-                      Receive weekly summaries of your emotional patterns
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.weeklyReports}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, weeklyReports: checked })
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">Analysis Alerts</div>
-                    <p className="text-sm text-gray-500">
-                      Get notified about significant emotion patterns
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifications.analysisAlerts}
-                    onCheckedChange={(checked) =>
-                      setNotifications({ ...notifications, analysisAlerts: checked })
-                    }
-                  />
-                </div>
-
-                <div className="border-t pt-4">
-                  <Button
-                    onClick={() => {
-                      toast.success("Notification preferences saved");
-                    }}
-                    className="w-full"
-                  >
-                    Save Preferences
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </div>

@@ -162,7 +162,7 @@ export function Analytics() {
   const totalDuration = filteredSessions.reduce((sum, s) => sum + s.duration, 0);
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background min-h-full">
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-3xl mb-2">Emotion Analytics</h1>
@@ -260,14 +260,14 @@ export function Analytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={barChartData}>
+                  <BarChart id="chart-emotion-count" data={barChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="emotion" />
                     <YAxis />
                     <Tooltip />
                     <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                       {barChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                        <Cell key={`bar-cell-${index}`} fill={entry.fill} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -285,7 +285,7 @@ export function Analytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={350}>
-                  <PieChart>
+                  <PieChart id="chart-emotion-dist">
                     <Pie
                       data={pieChartData}
                       cx="50%"
@@ -298,7 +298,7 @@ export function Analytics() {
                       dataKey="value"
                     >
                       {pieChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={`pie-cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -318,18 +318,18 @@ export function Analytics() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={dailyChartData}>
+                <BarChart id="chart-daily-breakdown" data={dailyChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="happy" stackId="a" fill={EMOTION_COLORS.happy} />
-                  <Bar dataKey="sad" stackId="a" fill={EMOTION_COLORS.sad} />
-                  <Bar dataKey="angry" stackId="a" fill={EMOTION_COLORS.angry} />
-                  <Bar dataKey="neutral" stackId="a" fill={EMOTION_COLORS.neutral} />
-                  <Bar dataKey="fearful" stackId="a" fill={EMOTION_COLORS.fearful} />
-                  <Bar dataKey="surprised" stackId="a" fill={EMOTION_COLORS.surprised} />
+                  <Bar name="daily-happy" dataKey="happy" stackId="a" fill={EMOTION_COLORS.happy} />
+                  <Bar name="daily-sad" dataKey="sad" stackId="a" fill={EMOTION_COLORS.sad} />
+                  <Bar name="daily-angry" dataKey="angry" stackId="a" fill={EMOTION_COLORS.angry} />
+                  <Bar name="daily-neutral" dataKey="neutral" stackId="a" fill={EMOTION_COLORS.neutral} />
+                  <Bar name="daily-fearful" dataKey="fearful" stackId="a" fill={EMOTION_COLORS.fearful} />
+                  <Bar name="daily-surprised" dataKey="surprised" stackId="a" fill={EMOTION_COLORS.surprised} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -347,13 +347,14 @@ export function Analytics() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={timelineData}>
+                <AreaChart id="chart-timeline" data={timelineData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="session" />
                   <YAxis />
                   <Tooltip />
                   <Legend />
                   <Area
+                    name="area-happy"
                     type="monotone"
                     dataKey="happy"
                     stackId="1"
@@ -362,6 +363,7 @@ export function Analytics() {
                     fillOpacity={0.6}
                   />
                   <Area
+                    name="area-sad"
                     type="monotone"
                     dataKey="sad"
                     stackId="1"
@@ -370,6 +372,7 @@ export function Analytics() {
                     fillOpacity={0.6}
                   />
                   <Area
+                    name="area-angry"
                     type="monotone"
                     dataKey="angry"
                     stackId="1"
@@ -378,6 +381,7 @@ export function Analytics() {
                     fillOpacity={0.6}
                   />
                   <Area
+                    name="area-neutral"
                     type="monotone"
                     dataKey="neutral"
                     stackId="1"
@@ -399,31 +403,35 @@ export function Analytics() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={timelineData}>
+                <LineChart id="chart-trends-line" data={timelineData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="session" />
                   <YAxis />
                   <Tooltip />
                   <Legend />
                   <Line
+                    name="line-happy"
                     type="monotone"
                     dataKey="happy"
                     stroke={EMOTION_COLORS.happy}
                     strokeWidth={3}
                   />
                   <Line
+                    name="line-sad"
                     type="monotone"
                     dataKey="sad"
                     stroke={EMOTION_COLORS.sad}
                     strokeWidth={3}
                   />
                   <Line
+                    name="line-angry"
                     type="monotone"
                     dataKey="angry"
                     stroke={EMOTION_COLORS.angry}
                     strokeWidth={3}
                   />
                   <Line
+                    name="line-neutral"
                     type="monotone"
                     dataKey="neutral"
                     stroke={EMOTION_COLORS.neutral}
@@ -446,7 +454,7 @@ export function Analytics() {
             </CardHeader>
             <CardContent className="flex justify-center">
               <ResponsiveContainer width="100%" height={450}>
-                <RadarChart data={radarData}>
+                <RadarChart id="chart-radar-intensity" data={radarData}>
                   <PolarGrid />
                   <PolarAngleAxis dataKey="emotion" />
                   <PolarRadiusAxis angle={90} domain={[0, 100]} />
@@ -516,7 +524,7 @@ export function Analytics() {
 
                   return (
                     <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
+                      <PieChart id="chart-pos-neg-pie">
                         <Pie
                           data={comparisonData}
                           cx="50%"
@@ -531,7 +539,7 @@ export function Analytics() {
                           dataKey="value"
                         >
                           {comparisonData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                            <Cell key={`comparison-cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip />
