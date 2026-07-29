@@ -1,1 +1,2 @@
-# emotion_recognition_webapp
+# emotion_web_app
+App to recognize chloe's emotions
