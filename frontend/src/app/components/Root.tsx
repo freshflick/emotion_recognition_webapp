@@ -23,98 +23,168 @@ export function Root() {
     { path: "/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/reports", label: "Reports", icon: FileText },
   ];
+const NAV_ITEMS = [
+  { path: "/", label: "Dashboard", icon: Activity },
+  { path: "/live", label: "Live Recording", icon: Mic },
+  { path: "/upload", label: "File Analysis", icon: Upload },
+  { path: "/analytics", label: "Analytics", icon: BarChart3 },
+  { path: "/reports", label: "Reports", icon: FileText },
+];
+
+export function Root() {
+  const location = useLocation();
+  const { user } = useUser();
+
+  const isActive = (path: string) =>
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(path);
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="w-60 bg-sidebar border-r border-sidebar-border flex-shrink-0 flex flex-col">
-        {/* Logo */}
-        <div className="px-5 pt-5 pb-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-primary rounded-lg shadow-sm">
-              <Activity className="size-4 text-primary-foreground" />
-            </div>
-            <div>
-              <div className="font-semibold text-sm text-sidebar-foreground leading-tight">EmotionMonitor</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">AI-Powered Analysis</div>
+      {/* ── Editorial Sidebar ── */}
+      <aside
+        className="w-56 flex-shrink-0 flex flex-col border-r"
+        style={{ borderColor: "var(--sidebar-border)", backgroundColor: "var(--sidebar)" }}
+      >
+        {/* Masthead */}
+        <div className="px-5 pt-6 pb-5 border-b" style={{ borderColor: "var(--sidebar-border)" }}>
+          <div className="mb-0.5">
+            <span
+              className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground block mb-1"
+              style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}
+            >
+              — Est. 2024
+            </span>
+            <div
+              className="text-lg font-bold leading-none text-foreground"
+              style={{ fontFamily: "'Playfair Display', Georgia, serif", letterSpacing: "-0.01em" }}
+            >
+              Emotion<br />
+              <span className="italic" style={{ color: "var(--primary)" }}>Monitor</span>
             </div>
           </div>
+          <p className="text-[10px] text-muted-foreground mt-2 tracking-widest uppercase">
+            AI·Powered Analysis
+          </p>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
+        {/* Navigation */}
+        <nav className="flex-1 px-4 py-5 space-y-0.5 overflow-y-auto">
+          <p className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground/60 mb-3 px-1">
+            Navigation
+          </p>
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive =
-              location.pathname === item.path ||
-              (item.path !== "/" && location.pathname.startsWith(item.path));
+            const active = isActive(item.path);
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                  isActive
-                    ? "bg-card text-primary font-medium shadow-sm"
-                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                }`}
+                className="flex items-center gap-2.5 px-2 py-2 text-xs tracking-wide transition-colors relative group"
+                style={{
+                  color: active ? "var(--foreground)" : "var(--muted-foreground)",
+                  fontFamily: "'IBM Plex Sans', sans-serif",
+                  fontWeight: active ? 600 : 400,
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                  fontSize: "10px",
+                }}
               >
-                <Icon className={`size-4 flex-shrink-0 ${isActive ? "text-primary" : ""}`} />
+                {active && (
+                  <span
+                    className="absolute left-0 top-1 bottom-1 w-0.5"
+                    style={{ backgroundColor: "var(--primary)" }}
+                  />
+                )}
+                <Icon
+                  className="flex-shrink-0"
+                  style={{
+                    width: 13,
+                    height: 13,
+                    color: active ? "var(--primary)" : "var(--muted-foreground)",
+                    opacity: active ? 1 : 0.7,
+                  }}
+                />
                 <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* System Status */}
-        <div className="mx-3 mb-3 px-3 py-2.5 rounded-xl bg-card border border-border">
+        {/* System status — inline editorial */}
+        <div
+          className="mx-4 mb-4 py-3 px-3 border"
+          style={{ borderColor: "var(--sidebar-border)" }}
+        >
           <div className="flex items-center gap-1.5 mb-2">
-            <span className="size-1.5 rounded-full bg-emerald-400 inline-block" />
-            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">All Systems Online</span>
+            <span className="size-1.5 rounded-full bg-emerald-500 inline-block" />
+            <span
+              className="text-[9px] tracking-[0.18em] uppercase text-muted-foreground"
+              style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}
+            >
+              All Systems Online
+            </span>
           </div>
-          <div className="space-y-1">
-            {STATUS_ITEMS.map((item) => (
-              <div key={item.label} className="flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground">{item.label}</span>
-                <div className="flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-emerald-400 inline-block" />
-                  <span className="text-[10px] text-emerald-500 dark:text-emerald-400">Online</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          {[["AI Engine", true], ["Audio API", true], ["ML Models", true]].map(([label, ok]) => (
+            <div key={label as string} className="flex items-center justify-between py-0.5">
+              <span className="text-[9px] text-muted-foreground/70" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                {label as string}
+              </span>
+              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 tracking-wide">
+                {ok ? "online" : "offline"}
+              </span>
+            </div>
+          ))}
         </div>
 
-        {/* User + Settings */}
-        <div className="border-t border-sidebar-border px-3 py-3 space-y-0.5">
+        {/* User footer */}
+        <div
+          className="border-t px-4 py-3 space-y-0.5"
+          style={{ borderColor: "var(--sidebar-border)" }}
+        >
           <Link
             to="/profile"
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-              location.pathname === "/profile"
-                ? "bg-card text-primary font-medium shadow-sm"
-                : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            }`}
+            className="flex items-center gap-2.5 px-2 py-2 transition-colors"
+            style={{
+              color: location.pathname === "/profile" ? "var(--foreground)" : "var(--muted-foreground)",
+              fontFamily: "'IBM Plex Sans', sans-serif",
+            }}
           >
-            <Avatar className="size-6">
+            <Avatar className="size-5 rounded-none">
               <AvatarImage src={user.avatar} />
-              <AvatarFallback className="bg-accent text-accent-foreground text-[10px] font-bold">
+              <AvatarFallback
+                className="text-[9px] font-bold rounded-none"
+                style={{ backgroundColor: "var(--accent)", color: "var(--foreground)" }}
+              >
                 {user.name.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-xs truncate text-sidebar-foreground">{user.name}</div>
-              <div className="text-[10px] text-muted-foreground truncate">View Profile</div>
+              <div
+                className="text-[10px] uppercase tracking-widest truncate"
+                style={{ fontWeight: 600, letterSpacing: "0.1em" }}
+              >
+                {user.name}
+              </div>
             </div>
+            <User style={{ width: 11, height: 11, opacity: 0.4 }} />
           </Link>
           <Link
             to="/settings"
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-              location.pathname === "/settings"
-                ? "bg-card text-primary font-medium shadow-sm"
-                : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            }`}
+            className="flex items-center gap-2.5 px-2 py-1.5 transition-colors"
+            style={{
+              color: location.pathname === "/settings" ? "var(--foreground)" : "var(--muted-foreground)",
+              fontFamily: "'IBM Plex Sans', sans-serif",
+            }}
           >
-            <Settings className="size-4" />
-            <span>Settings</span>
+            <Settings style={{ width: 11, height: 11, opacity: 0.6 }} />
+            <span
+              className="text-[9px] tracking-[0.14em] uppercase"
+              style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}
+            >
+              Settings
+            </span>
           </Link>
           <button
             onClick={() => { logout(); navigate("/login"); }}
@@ -126,7 +196,7 @@ export function Root() {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main content */}
       <main className="flex-1 overflow-auto bg-background">
         <Outlet />
       </main>

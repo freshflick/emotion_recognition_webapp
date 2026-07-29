@@ -13,13 +13,49 @@ import { getSessions } from "../utils/emotionEngine";
 import type { Emotion } from "../utils/emotionEngine";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
-  happy: "#f59e0b",
-  sad: "#6ea8fe",
-  angry: "#f87171",
-  neutral: "#a0a0c0",
-  fearful: "#c084fc",
-  surprised: "#fb923c",
+  happy: "#c07c20",
+  sad: "#1e5f8a",
+  angry: "#b8312f",
+  neutral: "#786c5c",
+  fearful: "#7a3a8a",
+  surprised: "#2e7d52",
 };
+
+const serif = "'Playfair Display', Georgia, serif";
+const sans = "'IBM Plex Sans', system-ui, sans-serif";
+
+function SectionRule({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <span
+        className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground/60"
+        style={{ fontFamily: sans }}
+      >
+        — {label}
+      </span>
+      <div className="flex-1 border-t" style={{ borderColor: "var(--border)" }} />
+    </div>
+  );
+}
+
+function StatBlock({
+  label, value, sub,
+}: { label: string; value: string | number; sub: string }) {
+  return (
+    <div className="border-l-2 pl-4 py-1" style={{ borderColor: "var(--border)" }}>
+      <p className="text-[9px] tracking-[0.18em] uppercase text-muted-foreground mb-1" style={{ fontFamily: sans }}>
+        {label}
+      </p>
+      <div
+        className="text-3xl font-bold text-foreground leading-none mb-1"
+        style={{ fontFamily: serif, letterSpacing: "-0.02em" }}
+      >
+        {value}
+      </div>
+      <p className="text-[10px] text-muted-foreground" style={{ fontFamily: sans }}>{sub}</p>
+    </div>
+  );
+}
 
 export function Dashboard() {
   const { user } = useUser();
@@ -70,161 +106,255 @@ export function Dashboard() {
   const tooltipStyle = {
     background: "var(--card)",
     border: "1px solid var(--border)",
-    borderRadius: "10px",
-    boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+    borderRadius: 0,
+    boxShadow: "none",
     color: "var(--card-foreground)",
-    fontSize: 12,
+    fontSize: 11,
+    fontFamily: sans,
   };
 
-  return (
-    <div className="p-7 min-h-full bg-background">
+  const axisStyle = { fontSize: 10, fill: "var(--muted-foreground)", fontFamily: sans };
 
-      {/* Greeting */}
-      <div className="mb-5">
-        <h1 className="text-2xl font-semibold text-foreground mb-0.5">
-          {greeting}, {user.name}!
+  return (
+    <div className="p-8 min-h-full bg-background">
+
+      {/* Masthead header */}
+      <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+        <p
+          className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground mb-3"
+          style={{ fontFamily: sans }}
+        >
+          — Emotion Analysis Dashboard / Published Continuously
+        </p>
+        <h1
+          className="font-bold text-foreground leading-tight mb-2"
+          style={{
+            fontFamily: serif,
+            fontSize: "clamp(2rem, 4vw, 3rem)",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {greeting},&nbsp;
+          <em style={{ color: "var(--primary)", fontStyle: "italic" }}>{user.name}.</em>
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Your emotion monitoring dashboard is live and ready.
+        <p
+          className="text-sm text-muted-foreground max-w-md"
+          style={{ fontFamily: sans, fontWeight: 300, lineHeight: 1.6 }}
+        >
+          Your emotion monitoring console is live and ready. Analysis is running in real time.
         </p>
       </div>
 
-      {/* System status pill */}
-      <div className="mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm">
-          <span className="size-2 rounded-full bg-emerald-400 inline-block" />
-          <span className="text-xs text-muted-foreground">All systems online</span>
+      {/* Status + quote row */}
+      <div className="flex flex-wrap items-start gap-6 mb-8">
+        <div className="flex items-center gap-2">
+          <span className="size-1.5 rounded-full bg-emerald-500 inline-block" />
+          <span
+            className="text-[10px] tracking-widest uppercase text-muted-foreground"
+            style={{ fontFamily: sans }}
+          >
+            All systems online
+          </span>
+        </div>
+        <div
+          className="flex-1 border-l pl-5 italic text-sm text-muted-foreground leading-relaxed min-w-[240px]"
+          style={{ fontFamily: serif, borderColor: "var(--border)" }}
+        >
+          "{quote.text}"
+          <span
+            className="not-italic ml-2 text-[10px] tracking-widest uppercase text-muted-foreground/60"
+            style={{ fontFamily: sans }}
+          >
+            — {quote.author}
+          </span>
         </div>
       </div>
 
-      {/* Quote Card */}
-      <Card className="mb-6 border-border bg-muted/40">
-        <CardContent className="py-4 px-5">
-          <div className="flex items-start gap-3">
-            <div className="p-1.5 bg-accent rounded-lg flex-shrink-0 mt-0.5">
-              <Sparkles className="size-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm italic text-foreground/80 leading-relaxed">"{quote.text}"</p>
-              <p className="text-xs text-muted-foreground mt-1">— {quote.author}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <Link to="/live">
-          <Button className="w-full h-16 bg-primary hover:bg-primary/90 text-primary-foreground gap-2 shadow-sm" size="lg">
-            <Mic className="size-4" />
-            Start Live Analysis
-          </Button>
-        </Link>
-        <Link to="/upload">
-          <Button className="w-full h-16 gap-2 border-border bg-card text-foreground hover:bg-accent" variant="outline" size="lg">
-            <Upload className="size-4" />
-            Upload Audio File
-          </Button>
-        </Link>
+      {/* Quick actions */}
+      <div className="mb-8">
+        <SectionRule label="Quick Access" />
+        <div className="flex gap-3">
+          <Link to="/live">
+            <Button
+              className="gap-2 text-[10px] tracking-[0.15em] uppercase px-5 py-2.5"
+              style={{
+                fontFamily: sans,
+                backgroundColor: "var(--foreground)",
+                color: "var(--background)",
+                borderRadius: 0,
+                height: "auto",
+              }}
+            >
+              <Mic style={{ width: 13, height: 13 }} />
+              Start Live Recording
+            </Button>
+          </Link>
+          <Link to="/upload">
+            <Button
+              variant="outline"
+              className="gap-2 text-[10px] tracking-[0.15em] uppercase px-5 py-2.5"
+              style={{
+                fontFamily: sans,
+                borderColor: "var(--border)",
+                color: "var(--foreground)",
+                borderRadius: 0,
+                height: "auto",
+              }}
+            >
+              <Upload style={{ width: 13, height: 13 }} />
+              Upload Audio File
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {[
-          { label: "Total Sessions", value: totalSessions, sub: "All time", icon: Activity, iconBg: "bg-primary/10", iconColor: "text-primary" },
-          { label: "Total Duration", value: `${Math.round(totalDuration / 60)}m`, sub: "Minutes analyzed", icon: Clock, iconBg: "bg-emerald-500/10", iconColor: "text-emerald-500" },
-          { label: "Avg Confidence", value: `${(avgConfidence * 100).toFixed(1)}%`, sub: "Model accuracy", icon: Brain, iconBg: "bg-primary/10", iconColor: "text-primary" },
-        ].map(({ label, value, sub, icon: Icon, iconBg, iconColor }) => (
-          <Card key={label} className="border-border bg-card">
-            <CardContent className="pt-5 pb-4 px-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                  <div className="text-2xl font-semibold text-foreground">{value}</div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
-                </div>
-                <div className={`p-2 rounded-xl ${iconBg}`}>
-                  <Icon className={`size-4 ${iconColor}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="mb-8">
+        <SectionRule label="Session Statistics" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <StatBlock label="Total Sessions" value={totalSessions} sub="All time" />
+          <StatBlock
+            label="Total Duration"
+            value={`${Math.round(totalDuration / 60)}m`}
+            sub="Minutes analyzed"
+          />
+          <StatBlock
+            label="Avg Confidence"
+            value={`${(avgConfidence * 100).toFixed(1)}%`}
+            sub="Model accuracy"
+          />
+        </div>
       </div>
 
       {/* Charts */}
       {sessions.length === 0 ? (
-        <Card className="border-border bg-card">
-          <CardContent className="py-16 text-center">
-            <div className="size-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-              <Brain className="size-6 text-muted-foreground" />
-            </div>
-            <h3 className="text-base font-medium text-foreground mb-2">No sessions yet</h3>
-            <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
-              Start a live analysis or upload an audio file to begin analyzing emotions
-            </p>
-            <div className="flex gap-3 justify-center">
-              <Link to="/live"><Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm">Start Live Analysis</Button></Link>
-              <Link to="/upload"><Button variant="outline" className="text-sm border-border">Upload File</Button></Link>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="border py-20 text-center" style={{ borderColor: "var(--border)" }}>
+          <Brain
+            className="mx-auto mb-4 text-muted-foreground/30"
+            style={{ width: 40, height: 40 }}
+          />
+          <h3
+            className="text-xl font-bold text-foreground mb-2"
+            style={{ fontFamily: serif }}
+          >
+            No sessions recorded yet.
+          </h3>
+          <p
+            className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto"
+            style={{ fontFamily: sans, fontWeight: 300 }}
+          >
+            Start a live recording or upload an audio file to begin analysis.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <Link to="/live">
+              <Button
+                style={{
+                  fontFamily: sans,
+                  fontSize: 10,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  backgroundColor: "var(--foreground)",
+                  color: "var(--background)",
+                  borderRadius: 0,
+                }}
+              >
+                Start Live Recording
+              </Button>
+            </Link>
+            <Link to="/upload">
+              <Button
+                variant="outline"
+                style={{
+                  fontFamily: sans,
+                  fontSize: 10,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  borderColor: "var(--border)",
+                  borderRadius: 0,
+                }}
+              >
+                Upload File
+              </Button>
+            </Link>
+          </div>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2 px-5 pt-5">
-              <CardTitle className="text-sm font-semibold text-foreground">Emotion Distribution</CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={90} dataKey="db_value">
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+        <div>
+          <SectionRule label="Visualisations" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Emotion Distribution */}
+            <div>
+              <p
+                className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-4"
+                style={{ fontFamily: sans }}
+              >
+                Emotion Distribution
+              </p>
+              <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={85}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2 px-5 pt-5">
-              <CardTitle className="text-sm font-semibold text-foreground">Session Confidence</CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={timelineData} margin={{ left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="confidence" fill="var(--primary)" radius={[5, 5, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Session Confidence */}
+            <div>
+              <p
+                className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-4"
+                style={{ fontFamily: sans }}
+              >
+                Session Confidence
+              </p>
+              <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={timelineData} margin={{ left: -20 }}>
+                    <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={axisStyle} />
+                    <YAxis tick={axisStyle} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="confidence" fill="var(--primary)" radius={0} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-          <Card className="border-border bg-card lg:col-span-2">
-            <CardHeader className="pb-2 px-5 pt-5">
-              <CardTitle className="text-sm font-semibold text-foreground">Emotion Trends</CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={trendData} margin={{ left: -20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  {(["happy", "sad", "angry", "neutral"] as Emotion[]).map((e) => (
-                    <Line key={e} type="monotone" dataKey={`db_${e}`} name={e} stroke={EMOTION_COLORS[e]} strokeWidth={2} dot={false} />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Emotion Trends */}
+            <div className="lg:col-span-2">
+              <p
+                className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-4"
+                style={{ fontFamily: sans }}
+              >
+                Emotion Trends — Session Timeline
+              </p>
+              <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={trendData} margin={{ left: -20 }}>
+                    <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={axisStyle} />
+                    <YAxis tick={axisStyle} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }} />
+                    {(["happy", "sad", "angry", "neutral"] as Emotion[]).map((e) => (
+                      <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={1.5} dot={false} />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

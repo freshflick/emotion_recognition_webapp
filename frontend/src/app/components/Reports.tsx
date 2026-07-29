@@ -1,22 +1,24 @@
 import { useState } from "react";
-import { Download, Calendar, FileText } from "lucide-react";
+import { Download, FileText } from "lucide-react";
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { getSessions, type Emotion } from "../utils/emotionEngine";
 import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
-  happy: "#f59e0b",
-  sad: "#3b82f6",
-  angry: "#ef4444",
-  neutral: "#6b7280",
-  fearful: "#a855f7",
-  surprised: "#f97316",
+  happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
+  neutral: "#786c5c", fearful: "#7a3a8a", surprised: "#2e7d52",
 };
+
+const serif = "'Playfair Display', Georgia, serif";
+const sans = "'IBM Plex Sans', system-ui, sans-serif";
+const mono = "'IBM Plex Mono', monospace";
 
 type ReportPeriod = "daily" | "weekly" | "monthly";
 
@@ -29,23 +31,12 @@ export function Reports() {
   // Filter sessions by period
   const filterSessionsByPeriod = (period: ReportPeriod) => {
     const now = new Date();
-    const filtered = sessions.filter((session) => {
+    return sessions.filter((session) => {
       const sessionDate = new Date(session.timestamp);
-      
-      if (period === "daily") {
-        return (
-          sessionDate.toDateString() === now.toDateString()
-        );
-      } else if (period === "weekly") {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        return sessionDate >= weekAgo;
-      } else {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        return sessionDate >= monthAgo;
-      }
+      if (period === "daily") return sessionDate.toDateString() === now.toDateString();
+      if (period === "weekly") return sessionDate >= new Date(now.getTime() - 7 * 86400000);
+      return sessionDate >= new Date(now.getTime() - 30 * 86400000);
     });
-    
-    return filtered;
   };
 
   const filteredSessions = filterSessionsByPeriod(selectedPeriod);
@@ -53,11 +44,9 @@ export function Reports() {
   // Calculate statistics
   const totalSessions = filteredSessions.length;
   const totalDuration = filteredSessions.reduce((sum, s) => sum + s.duration, 0);
-  const avgConfidence =
-    totalSessions > 0
-      ? filteredSessions.reduce((sum, s) => sum + s.summary.averageConfidence, 0) /
-        totalSessions
-      : 0;
+  const avgConfidence = totalSessions > 0
+    ? filteredSessions.reduce((sum, s) => sum + s.summary.averageConfidence, 0) / totalSessions
+    : 0;
 
   // Emotion distribution
   const emotionCounts: { [key in Emotion]: number } = {
@@ -75,26 +64,22 @@ export function Reports() {
 
   const pieData = Object.entries(emotionCounts).map(([emotion, count]) => ({
     name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-    rp_value: count,
+    value: count,
     color: EMOTION_COLORS[emotion as Emotion],
   }));
 
-  // Daily breakdown for the period
-  const dailyData: { [date: string]: { rp_sessions: number; avgConfidence: number } } = {};
-
+  const dailyData: { [date: string]: { sessions: number; avgConfidence: number } } = {};
   filteredSessions.forEach((session) => {
     const date = new Date(session.timestamp).toLocaleDateString();
-    if (!dailyData[date]) {
-      dailyData[date] = { rp_sessions: 0, avgConfidence: 0 };
-    }
-    dailyData[date].rp_sessions++;
+    if (!dailyData[date]) dailyData[date] = { sessions: 0, avgConfidence: 0 };
+    dailyData[date].sessions++;
     dailyData[date].avgConfidence += session.summary.averageConfidence;
   });
 
   const dailyChartData = Object.entries(dailyData).map(([date, data]) => ({
     date: date.split("/").slice(0, 2).join("/"),
-    rp_sessions: data.rp_sessions,
-    confidence: ((data.avgConfidence / data.rp_sessions) * 100).toFixed(1),
+    sessions: data.sessions,
+    confidence: ((data.avgConfidence / data.sessions) * 100).toFixed(1),
   }));
 
   // Generate PDF Report
@@ -107,11 +92,7 @@ export function Reports() {
     
     // Period
     doc.setFontSize(12);
-    doc.text(
-      `Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`,
-      20,
-      30
-    );
+    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30);
     doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 37);
     
     // Summary Statistics
@@ -125,13 +106,10 @@ export function Reports() {
         ["Total Sessions", totalSessions.toString()],
         ["Total Duration", `${Math.round(totalDuration / 60)} minutes`],
         ["Average Confidence", `${(avgConfidence * 100).toFixed(1)}%`],
-        [
-          "Most Common Emotion",
-          Object.entries(emotionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A",
-        ],
+        ["Most Common Emotion", Object.entries(emotionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A"],
       ],
     });
-    
+
     // Emotion Distribution
     doc.setFontSize(16);
     const finalY = (doc as any).lastAutoTable.finalY || 100;
@@ -156,12 +134,9 @@ export function Reports() {
       autoTable(doc, {
         startY: sessionFinalY + 20,
         head: [["Date", "Type", "Duration", "Dominant Emotion", "Confidence"]],
-        body: filteredSessions.slice(0, 10).map((session) => [
-          new Date(session.timestamp).toLocaleString(),
-          session.type,
-          `${session.duration}s`,
-          session.summary.dominantEmotion,
-          `${(session.summary.averageConfidence * 100).toFixed(1)}%`,
+        body: filteredSessions.slice(0, 10).map((s) => [
+          new Date(s.timestamp).toLocaleString(), s.type, `${s.duration}s`,
+          s.summary.dominantEmotion, `${(s.summary.averageConfidence * 100).toFixed(1)}%`,
         ]),
       });
     }
@@ -175,211 +150,195 @@ export function Reports() {
   // Generate CSV Report
   const generateCSVReport = () => {
     let csv = "Session ID,Timestamp,Type,Duration (s),Dominant Emotion,Confidence\n";
-    
-    filteredSessions.forEach((session) => {
-      csv += `${session.id},${new Date(session.timestamp).toISOString()},${session.type},${
-        session.duration
-      },${session.summary.dominantEmotion},${session.summary.averageConfidence}\n`;
+    filteredSessions.forEach((s) => {
+      csv += `${s.id},${new Date(s.timestamp).toISOString()},${s.type},${s.duration},${s.summary.dominantEmotion},${s.summary.averageConfidence}\n`;
     });
     
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `emotion-data-${selectedPeriod}-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("CSV report downloaded successfully");
+    a.href = url; a.download = `emotion-data-${selectedPeriod}-${Date.now()}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success("CSV exported");
   };
+
+  const tooltipStyle = {
+    background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
+    boxShadow: "none", color: "var(--card-foreground)", fontSize: 11, fontFamily: sans,
+  };
+  const axisStyle = { fontSize: 10, fill: "var(--muted-foreground)", fontFamily: sans };
 
   return (
     <div className="p-8 bg-background min-h-full">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8 flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl mb-2">Reports & Analytics</h1>
-            <p className="text-gray-600">
-              Generate comprehensive emotion analysis reports
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={generatePDFReport} disabled={totalSessions === 0}>
-              <Download className="size-4 mr-2" />
-              Download PDF
-            </Button>
-            <Button
-              variant="outline"
-              onClick={generateCSVReport}
-              disabled={totalSessions === 0}
+      <div className="max-w-6xl mx-auto">
+
+        {/* Header */}
+        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+          <p className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground mb-2" style={{ fontFamily: sans }}>
+            — Reports & Analytics / Published on Demand
+          </p>
+          <div className="flex items-end justify-between gap-4">
+            <h1
+              className="font-bold text-foreground leading-tight"
+              style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
             >
-              <Download className="size-4 mr-2" />
-              Export CSV
-            </Button>
+              Emotion <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Reports</em>
+            </h1>
+            <div className="flex gap-2">
+              <Button
+                onClick={generatePDFReport}
+                disabled={totalSessions === 0}
+                className="text-[9px] tracking-[0.12em] uppercase gap-2"
+                style={{
+                  fontFamily: sans, borderRadius: 0, height: "auto", padding: "8px 16px",
+                  backgroundColor: "var(--foreground)", color: "var(--background)",
+                }}
+              >
+                <Download style={{ width: 12, height: 12 }} />
+                Download PDF
+              </Button>
+              <Button
+                variant="outline"
+                onClick={generateCSVReport}
+                disabled={totalSessions === 0}
+                className="text-[9px] tracking-[0.12em] uppercase gap-2"
+                style={{ fontFamily: sans, borderRadius: 0, height: "auto", padding: "8px 16px", borderColor: "var(--border)" }}
+              >
+                <Download style={{ width: 12, height: 12 }} />
+                Export CSV
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Report Type Tabs */}
+        {/* Period tabs */}
         <Tabs value={selectedPeriod} onValueChange={(v) => setSelectedPeriod(v as ReportPeriod)}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="daily">Daily</TabsTrigger>
-            <TabsTrigger value="weekly">Weekly</TabsTrigger>
-            <TabsTrigger value="monthly">Monthly</TabsTrigger>
-          </TabsList>
+          <div className="border-b mb-8" style={{ borderColor: "var(--border)" }}>
+            <TabsList className="bg-transparent h-auto p-0 gap-0">
+              {["daily", "weekly", "monthly"].map((tab) => (
+                <TabsTrigger
+                  key={tab}
+                  value={tab}
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-5 pb-3 pt-0 text-[9px] tracking-[0.18em] uppercase capitalize"
+                  style={{ fontFamily: sans }}
+                >
+                  {tab}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           <TabsContent value={selectedPeriod}>
             {totalSessions === 0 ? (
-              <Card className="p-12 text-center">
-                <FileText className="size-16 mx-auto mb-4 text-gray-300" />
-                <h3 className="text-xl mb-2">No data available</h3>
-                <p className="text-gray-600">
-                  No sessions found for the selected period. Start recording to generate
-                  reports.
+              <div className="border py-20 text-center" style={{ borderColor: "var(--border)" }}>
+                <FileText className="mx-auto mb-4 text-muted-foreground/20" style={{ width: 40, height: 40 }} />
+                <h3 className="text-xl font-bold text-foreground mb-2" style={{ fontFamily: serif }}>
+                  No data for this period.
+                </h3>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: sans, fontWeight: 300 }}>
+                  Start a recording session to generate reports.
                 </p>
-              </Card>
+              </div>
             ) : (
               <>
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Total Sessions</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl">{totalSessions}</div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        In the past {selectedPeriod === "daily" ? "day" : selectedPeriod === "weekly" ? "week" : "month"}
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Total Duration</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl">{Math.round(totalDuration / 60)}m</div>
-                      <p className="text-xs text-gray-500 mt-1">Minutes of audio analyzed</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Avg Confidence</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl">{(avgConfidence * 100).toFixed(1)}%</div>
-                      <p className="text-xs text-gray-500 mt-1">Model prediction accuracy</p>
-                    </CardContent>
-                  </Card>
+                {/* Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                  {[
+                    { label: "Total Sessions", value: totalSessions, sub: `Past ${selectedPeriod === "daily" ? "day" : selectedPeriod === "weekly" ? "week" : "month"}` },
+                    { label: "Total Duration", value: `${Math.round(totalDuration / 60)}m`, sub: "Minutes analyzed" },
+                    { label: "Avg Confidence", value: `${(avgConfidence * 100).toFixed(1)}%`, sub: "Model accuracy" },
+                  ].map(({ label, value, sub }) => (
+                    <div key={label} className="border-l-2 pl-4 py-1" style={{ borderColor: "var(--border)" }}>
+                      <p className="text-[9px] tracking-[0.18em] uppercase text-muted-foreground mb-1" style={{ fontFamily: sans }}>{label}</p>
+                      <div className="text-3xl font-bold leading-none mb-1" style={{ fontFamily: serif, letterSpacing: "-0.02em" }}>{value}</div>
+                      <p className="text-[10px] text-muted-foreground" style={{ fontFamily: sans }}>{sub}</p>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  {/* Emotion Distribution — CSS bars */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Emotion Distribution</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3 pt-1">
-                        {pieData
-                          .sort((a, b) => b.rp_value - a.rp_value)
-                          .map((entry) => {
-                            const pct = totalSessions > 0 ? (entry.rp_value / totalSessions) * 100 : 0;
-                            return (
-                              <div key={entry.name}>
-                                <div className="flex justify-between text-sm mb-1">
-                                  <span className="flex items-center gap-2 capitalize text-foreground/80">
-                                    <span className="size-2.5 rounded-full inline-block flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                                    {entry.name}
-                                  </span>
-                                  <span className="text-muted-foreground tabular-nums">
-                                    {entry.rp_value} ({pct.toFixed(0)}%)
-                                  </span>
-                                </div>
-                                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full transition-all duration-500"
-                                    style={{ width: `${pct}%`, backgroundColor: entry.color }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Daily Breakdown — CSS bars */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Daily Breakdown</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {dailyChartData.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-8 text-center">No daily data</p>
-                      ) : (
-                        <div className="space-y-3 pt-1">
-                          {(() => {
-                            const max = Math.max(...dailyChartData.map((d) => d.rp_sessions), 1);
-                            return dailyChartData.map((d) => (
-                              <div key={d.date}>
-                                <div className="flex justify-between text-sm mb-1">
-                                  <span className="text-foreground/80">{d.date}</span>
-                                  <span className="text-muted-foreground tabular-nums">{d.rp_sessions} sessions</span>
-                                </div>
-                                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-primary transition-all duration-500"
-                                    style={{ width: `${(d.rp_sessions / max) * 100}%` }}
-                                  />
-                                </div>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                  <div>
+                    <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
+                      Emotion Distribution
+                    </p>
+                    <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="50%" labelLine={false}
+                            label={({ name, value }) => totalSessions > 0 ? `${name}: ${value}` : ""}
+                            outerRadius={95} dataKey="value">
+                            {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                          </Pie>
+                          <Tooltip contentStyle={tooltipStyle} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
+                      Daily Breakdown
+                    </p>
+                    <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={dailyChartData}>
+                          <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                          <XAxis dataKey="date" tick={axisStyle} />
+                          <YAxis tick={axisStyle} />
+                          <Tooltip contentStyle={tooltipStyle} />
+                          <Legend wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }} />
+                          <Bar dataKey="sessions" fill="var(--primary)" name="Sessions" radius={0} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Session List */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Session History</CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                {/* Session table */}
+                <div>
+                  <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
+                    Session History
+                  </p>
+                  <div className="border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-3 px-4">Date & Time</th>
-                            <th className="text-left py-3 px-4">Type</th>
-                            <th className="text-left py-3 px-4">Duration</th>
-                            <th className="text-left py-3 px-4">Dominant Emotion</th>
-                            <th className="text-left py-3 px-4">Confidence</th>
+                          <tr className="border-b" style={{ borderColor: "var(--border)" }}>
+                            {["Date & Time", "Type", "Duration", "Dominant Emotion", "Confidence"].map((h) => (
+                              <th
+                                key={h}
+                                className="text-left py-3 px-4 text-[9px] tracking-[0.16em] uppercase text-muted-foreground font-normal"
+                                style={{ fontFamily: sans }}
+                              >
+                                {h}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
                           {filteredSessions.slice(0, 20).map((session) => (
-                            <tr key={session.id} className="border-b hover:bg-gray-50">
-                              <td className="py-3 px-4">
+                            <tr
+                              key={session.id}
+                              className="border-b transition-colors"
+                              style={{ borderColor: "var(--border)" }}
+                            >
+                              <td className="py-3 px-4 text-xs text-muted-foreground" style={{ fontFamily: mono }}>
                                 {new Date(session.timestamp).toLocaleString()}
                               </td>
-                              <td className="py-3 px-4 capitalize">{session.type}</td>
-                              <td className="py-3 px-4">{session.duration}s</td>
                               <td className="py-3 px-4">
-                                <span
-                                  className="capitalize font-semibold"
-                                  style={{
-                                    color:
-                                      EMOTION_COLORS[session.summary.dominantEmotion],
-                                  }}
-                                >
+                                <span className="text-[9px] tracking-widest uppercase px-1.5 py-0.5" style={{ backgroundColor: "var(--muted)", fontFamily: sans }}>
+                                  {session.type}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-xs tabular-nums text-muted-foreground" style={{ fontFamily: mono }}>
+                                {session.duration}s
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="text-xs font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[session.summary.dominantEmotion] }}>
                                   {session.summary.dominantEmotion}
                                 </span>
                               </td>
-                              <td className="py-3 px-4">
+                              <td className="py-3 px-4 text-xs tabular-nums text-muted-foreground" style={{ fontFamily: mono }}>
                                 {(session.summary.averageConfidence * 100).toFixed(1)}%
                               </td>
                             </tr>
@@ -387,8 +346,8 @@ export function Reports() {
                         </tbody>
                       </table>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </>
             )}
           </TabsContent>
