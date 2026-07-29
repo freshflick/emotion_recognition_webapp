@@ -59,28 +59,35 @@ export function Settings() {
   return (
     <div className="p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl mb-2">Settings</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Manage your account preferences and application settings
+        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+          <p className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground mb-2" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
+            — Account Settings / Preferences
+          </p>
+          <h1
+            className="font-bold text-foreground leading-tight"
+            style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
+          >
+            <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Settings</em>
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300 }}>
+            Manage your account preferences and application settings.
           </p>
         </div>
 
         <Tabs defaultValue="account" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="account">
-              <User className="size-4 mr-2" />
+          <div className="border-b" style={{ borderColor: "var(--border)" }}>
+            <TabsList className="bg-transparent h-auto p-0 gap-0">
+            <TabsTrigger value="account" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 pb-3 pt-0 text-[9px] tracking-[0.16em] uppercase" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
               Account
             </TabsTrigger>
-            <TabsTrigger value="security">
-              <Lock className="size-4 mr-2" />
+            <TabsTrigger value="security" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 pb-3 pt-0 text-[9px] tracking-[0.16em] uppercase" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
               Security
             </TabsTrigger>
-            <TabsTrigger value="appearance">
-              <Palette className="size-4 mr-2" />
+            <TabsTrigger value="appearance" className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 pb-3 pt-0 text-[9px] tracking-[0.16em] uppercase" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
               Appearance
             </TabsTrigger>
           </TabsList>
+          </div>
 
           {/* Account Tab */}
           <TabsContent value="account" className="space-y-6">
@@ -301,7 +308,7 @@ export function Settings() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-[#f5f5fc] dark:bg-[#28284a] rounded-xl">
+                  <div className="flex items-center justify-between p-4 border" style={{ borderColor: "var(--border)", backgroundColor: "var(--muted)" }}>
                     <div>
                       <div className="font-medium text-slate-700 dark:text-slate-200">Current Device</div>
                       <p className="text-sm text-slate-400">

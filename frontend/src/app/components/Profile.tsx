@@ -60,10 +60,18 @@ export function Profile() {
   return (
     <div className="p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl mb-2">My Profile</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Manage your personal information and account settings
+        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+          <p className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground mb-2" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
+            — User Profile / Account Details
+          </p>
+          <h1
+            className="font-bold text-foreground leading-tight"
+            style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
+          >
+            My <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Profile</em>
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontWeight: 300 }}>
+            Manage your personal information and account settings.
           </p>
         </div>
 

@@ -1,67 +1,38 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
-import { Mic, Square, Play, Pause, Radio, Waves } from "lucide-react";
+import { Mic, Square, Play, Pause, Waves } from "lucide-react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Badge } from "./ui/badge";
 import {
-  generateMockEmotionData,
-  generateMockTranscript,
-  addSession,
-  calculateSessionSummary,
-  type EmotionData,
-  type Emotion,
+  generateMockEmotionData, generateMockTranscript, addSession,
+  calculateSessionSummary, type EmotionData, type Emotion,
 } from "../utils/emotionEngine";
 import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
-  happy: "#f59e0b",
-  sad: "#3b82f6",
-  angry: "#ef4444",
-  neutral: "#8b8ba8",
-  fearful: "#a855f7",
-  surprised: "#f97316",
+  happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
+  neutral: "#786c5c", fearful: "#7a3a8a", surprised: "#2e7d52",
 };
 
-const EMOTION_BG: { [key in Emotion]: string } = {
-  happy: "#fef3c7",
-  sad: "#dbeafe",
-  angry: "#fee2e2",
-  neutral: "#ededf5",
-  fearful: "#f3e8ff",
-  surprised: "#ffedd5",
-};
-
-const EMOTION_EMOJI: { [key in Emotion]: string } = {
-  happy: "😊",
-  sad: "😢",
-  angry: "😠",
-  neutral: "😐",
-  fearful: "😨",
-  surprised: "😮",
-};
+const serif = "'Playfair Display', Georgia, serif";
+const sans = "'IBM Plex Sans', system-ui, sans-serif";
+const mono = "'IBM Plex Mono', monospace";
 
 function WaveformBars({ active }: { active: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-[3px] h-8">
-      {Array.from({ length: 24 }).map((_, i) => (
+    <div className="flex items-center justify-center gap-[2px] h-8">
+      {Array.from({ length: 32 }).map((_, i) => (
         <div
           key={i}
-          className="w-[3px] rounded-full bg-primary/50"
           style={{
-            height: active ? `${20 + Math.random() * 60}%` : "20%",
-            animation: active ? `waveBar ${0.6 + (i % 5) * 0.12}s ease-in-out infinite alternate` : "none",
-            animationDelay: `${(i * 0.05) % 0.5}s`,
+            width: 2,
+            backgroundColor: active ? "var(--primary)" : "var(--muted-foreground)",
+            opacity: active ? 0.6 : 0.2,
+            height: active ? `${20 + Math.random() * 60}%` : "15%",
+            animation: active ? `waveBar ${0.5 + (i % 5) * 0.12}s ease-in-out infinite alternate` : "none",
+            animationDelay: `${(i * 0.04) % 0.5}s`,
             transition: "height 0.15s ease",
           }}
         />
@@ -85,7 +56,6 @@ export function LiveRecording() {
   const [currentEmotion, setCurrentEmotion] = useState<EmotionData | null>(null);
   const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(0);
@@ -93,10 +63,8 @@ export function LiveRecording() {
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
-        const now = Date.now();
-        const elapsed = Math.floor((now - startTimeRef.current - pausedTimeRef.current) / 1000);
+        const elapsed = Math.floor((Date.now() - startTimeRef.current - pausedTimeRef.current) / 1000);
         setDuration(elapsed);
-
         if (elapsed % 2 === 0 && elapsed > 0) {
           const newTranscript = generateMockTranscript();
           const newEmotion = generateMockEmotionData(elapsed, newTranscript);
@@ -106,62 +74,33 @@ export function LiveRecording() {
         }
       }, 1000);
     }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isRecording, isPaused]);
 
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcript]);
+  useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [transcript]);
 
   const startRecording = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      setIsRecording(true);
-      setIsPaused(false);
-      startTimeRef.current = Date.now();
-      pausedTimeRef.current = 0;
-      setDuration(0);
-      setEmotionData([]);
-      setTranscript([]);
-      setCurrentEmotion(null);
+      setIsRecording(true); setIsPaused(false);
+      startTimeRef.current = Date.now(); pausedTimeRef.current = 0;
+      setDuration(0); setEmotionData([]); setTranscript([]); setCurrentEmotion(null);
       toast.success("Recording started");
-    } catch {
-      toast.error("Could not access microphone");
-    }
+    } catch { toast.error("Could not access microphone"); }
   };
 
-  const pauseRecording = () => {
-    setIsPaused(true);
-    toast.info("Recording paused");
-  };
+  const pauseRecording = () => { setIsPaused(true); toast.info("Recording paused"); };
 
   const resumeRecording = () => {
-    const pauseStartTime = Date.now();
-    pausedTimeRef.current += pauseStartTime - startTimeRef.current;
-    startTimeRef.current = pauseStartTime;
-    setIsPaused(false);
-    toast.info("Recording resumed");
+    const t = Date.now(); pausedTimeRef.current += t - startTimeRef.current;
+    startTimeRef.current = t; setIsPaused(false); toast.info("Recording resumed");
   };
 
   const stopRecording = () => {
-    if (emotionData.length === 0) {
-      toast.error("No data recorded");
-      setIsRecording(false);
-      return;
-    }
+    if (emotionData.length === 0) { toast.error("No data recorded"); setIsRecording(false); return; }
     const summary = calculateSessionSummary(emotionData);
-    addSession({
-      id: `session-${Date.now()}`,
-      timestamp: Date.now(),
-      duration,
-      type: "live",
-      emotionData,
-      summary,
-    });
-    setIsRecording(false);
-    setIsPaused(false);
+    addSession({ id: `session-${Date.now()}`, timestamp: Date.now(), duration, type: "live", emotionData, summary });
+    setIsRecording(false); setIsPaused(false);
     toast.success("Recording saved successfully");
     setTimeout(() => navigate("/"), 1500);
   };
@@ -176,378 +115,412 @@ export function LiveRecording() {
     surprised: (data.fused.surprised * 100).toFixed(1),
   }));
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+  const formatDuration = (s: number) =>
+    `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-  const isActiveRecording = isRecording && !isPaused;
-
-  const signalStatuses = [
-    {
-      label: "Microphone",
-      status: isActiveRecording ? "active" : isPaused ? "paused" : "ready",
-      dot: isActiveRecording ? "bg-rose-400 animate-pulse" : isPaused ? "bg-amber-400" : "bg-emerald-400",
-      text: isActiveRecording ? "text-rose-500" : isPaused ? "text-amber-500" : "text-emerald-500",
-    },
-    {
-      label: "Speech Encoder",
-      status: isActiveRecording ? "processing" : "standby",
-      dot: isActiveRecording ? "bg-primary animate-pulse" : "bg-muted-foreground/30",
-      text: isActiveRecording ? "text-primary" : "text-muted-foreground",
-    },
-    {
-      label: "Fusion Model (R20)",
-      status: isActiveRecording ? "online" : "idle",
-      dot: isActiveRecording ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/30",
-      text: isActiveRecording ? "text-emerald-500" : "text-muted-foreground",
-    },
-  ];
-
+  const isActive = isRecording && !isPaused;
   const audioResult = currentEmotion ? getDominantWithScore(currentEmotion.audio) : null;
   const textResult = currentEmotion ? getDominantWithScore(currentEmotion.text) : null;
   const fusedResult = currentEmotion ? getDominantWithScore(currentEmotion.fused) : null;
 
+  const tooltipStyle = {
+    background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
+    boxShadow: "none", color: "var(--card-foreground)", fontSize: 11, fontFamily: sans,
+  };
+  const axisStyle = { fontSize: 10, fill: "var(--muted-foreground)", fontFamily: sans };
+
   return (
     <div className="min-h-full bg-background">
       <style>{`
-        @keyframes waveBar {
-          from { transform: scaleY(0.4); }
-          to { transform: scaleY(1); }
-        }
-        @keyframes pulseRing {
-          0% { transform: scale(1); opacity: 0.6; }
-          100% { transform: scale(1.6); opacity: 0; }
-        }
-        .pulse-ring { animation: pulseRing 1.4s ease-out infinite; }
-        .pulse-ring-2 { animation: pulseRing 1.4s ease-out 0.5s infinite; }
+        @keyframes waveBar { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
       `}</style>
 
-      <div className="max-w-7xl mx-auto p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-6 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2.5 mb-1">
-              <Radio className="size-5 text-primary" />
-              <h1 className="text-2xl font-semibold text-foreground">Live Emotion Recording</h1>
+      <div className="max-w-7xl mx-auto p-8">
+        {/* Page header */}
+        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground mb-2" style={{ fontFamily: sans }}>
+                — Live Session / Multimodal Emotion Recording
+              </p>
+              <h1
+                className="font-bold text-foreground leading-tight"
+                style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
+              >
+                Live Emotion{" "}
+                <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Recording</em>
+              </h1>
+              <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
+                Real-time audio-text fusion · attention-based multimodal analysis (R20)
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground ml-[30px]">
-              Real-time audio-text fusion · attention-based multimodal analysis (R20)
-            </p>
+            {isActive && (
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 border"
+                style={{ borderColor: "var(--primary)", color: "var(--primary)" }}
+              >
+                <span
+                  className="size-1.5 rounded-full animate-pulse inline-block"
+                  style={{ backgroundColor: "var(--primary)" }}
+                />
+                <span className="text-[9px] tracking-[0.2em] uppercase font-semibold" style={{ fontFamily: sans }}>
+                  Live
+                </span>
+              </div>
+            )}
           </div>
-          {isActiveRecording && (
-            <Badge className="bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900 flex items-center gap-1.5 px-3 py-1.5 text-xs">
-              <span className="size-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />
-              LIVE
-            </Badge>
-          )}
+
+          {/* Signal status */}
+          <div className="flex flex-wrap gap-4 mt-4">
+            {[
+              { label: "Microphone", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
+              { label: "Speech Encoder", status: isActive ? "processing" : "standby", color: isActive ? "var(--primary)" : "var(--muted-foreground)" },
+              { label: "Fusion Model (R20)", status: isActive ? "online" : "idle", color: isActive ? "#2e7d52" : "var(--muted-foreground)" },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-2">
+                <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
+                <span className="text-[9px] tracking-[0.12em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                  {s.label}
+                </span>
+                <span className="text-[9px] tracking-widest uppercase font-semibold" style={{ color: s.color, fontFamily: sans }}>
+                  {s.status}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Signal status bar */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {signalStatuses.map((s) => (
-            <div key={s.label} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm">
-              <span className={`size-2 rounded-full ${s.dot}`} />
-              <span className="text-xs text-muted-foreground">{s.label}</span>
-              <span className={`text-[10px] font-semibold ${s.text} uppercase tracking-wide`}>{s.status}</span>
-            </div>
-          ))}
-        </div>
+        {/* Main layout */}
+        <div className="grid grid-cols-1 xl:grid-cols-[300px_1fr] gap-8">
 
-        {/* Main layout: left recorder, right panels */}
-        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
-
-          {/* ── Left: Recording Control ── */}
-          <div className="space-y-5">
-            <Card className="border border-border shadow-sm bg-card overflow-hidden">
-              <CardContent className="p-0">
-                <div className={`h-1 w-full transition-all duration-700 ${
-                  isActiveRecording
-                    ? "bg-gradient-to-r from-rose-400 via-pink-400 to-primary"
-                    : isPaused
-                    ? "bg-gradient-to-r from-amber-300 to-orange-300"
-                    : "bg-gradient-to-r from-primary/60 to-primary/30"
-                }`} />
+          {/* ── Recorder Control ── */}
+          <div className="space-y-6">
+            <div>
+              <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
+                Recording Control
+              </p>
+              <div
+                className="border"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+              >
+                {/* Color bar */}
+                <div
+                  className="h-0.5 w-full transition-all duration-700"
+                  style={{
+                    backgroundColor: isActive ? "var(--primary)" : isPaused ? "#c07c20" : "var(--muted)",
+                  }}
+                />
 
                 <div className="p-7 flex flex-col items-center gap-5">
                   {/* Mic button */}
                   <div className="relative flex items-center justify-center mt-2">
-                    {isActiveRecording && (
+                    {isActive && (
                       <>
-                        <div className="absolute size-28 rounded-full bg-rose-400/20 pulse-ring" />
-                        <div className="absolute size-28 rounded-full bg-rose-400/10 pulse-ring-2" />
+                        <div className="absolute size-28 opacity-10 animate-ping" style={{ backgroundColor: "var(--primary)", borderRadius: 0 }} />
+                        <div className="absolute size-20 opacity-10" style={{ backgroundColor: "var(--primary)", borderRadius: 0, animation: "ping 1.4s ease-out 0.5s infinite" }} />
                       </>
                     )}
                     <button
                       onClick={!isRecording ? startRecording : undefined}
                       disabled={isRecording}
-                      className={`relative size-22 w-22 h-22 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 ${
-                        !isRecording
-                          ? "bg-primary hover:bg-primary/90 hover:scale-105 cursor-pointer"
-                          : isActiveRecording
-                          ? "bg-rose-500 cursor-default"
-                          : "bg-amber-400 cursor-default"
-                      }`}
-                      style={{ width: 88, height: 88 }}
+                      className="relative flex items-center justify-center transition-all duration-200"
+                      style={{
+                        width: 80, height: 80,
+                        borderRadius: 0,
+                        backgroundColor: !isRecording ? "var(--foreground)" : isActive ? "var(--primary)" : "#c07c20",
+                        cursor: !isRecording ? "pointer" : "default",
+                      }}
                     >
-                      <Mic className="size-9 text-primary-foreground" />
+                      <Mic style={{ width: 28, height: 28, color: isActive ? "var(--card)" : "var(--background)" }} />
                     </button>
                   </div>
 
                   {/* Timer */}
                   <div className="text-center">
-                    <div className={`text-5xl font-mono font-light tracking-widest tabular-nums ${
-                      isActiveRecording ? "text-rose-500" : "text-foreground"
-                    }`}>
+                    <div
+                      className="text-5xl leading-none tabular-nums"
+                      style={{
+                        fontFamily: mono,
+                        fontWeight: 400,
+                        letterSpacing: "0.06em",
+                        color: isActive ? "var(--primary)" : "var(--foreground)",
+                      }}
+                    >
                       {formatDuration(duration)}
                     </div>
-                    <div className="mt-1.5 flex items-center justify-center gap-2 h-5">
-                      {isActiveRecording && (
-                        <>
-                          <span className="size-1.5 rounded-full bg-rose-500 animate-pulse" />
-                          <span className="text-[11px] font-semibold text-rose-500 uppercase tracking-widest">Recording</span>
-                        </>
+                    <div className="mt-2 h-4 flex items-center justify-center">
+                      {isActive && (
+                        <span className="text-[9px] tracking-[0.2em] uppercase font-semibold" style={{ color: "var(--primary)", fontFamily: sans }}>
+                          Recording
+                        </span>
                       )}
                       {isPaused && (
-                        <>
-                          <span className="size-1.5 rounded-full bg-amber-400" />
-                          <span className="text-[11px] font-semibold text-amber-500 uppercase tracking-widest">Paused</span>
-                        </>
+                        <span className="text-[9px] tracking-[0.2em] uppercase font-semibold" style={{ color: "#c07c20", fontFamily: sans }}>
+                          Paused
+                        </span>
                       )}
                       {!isRecording && duration === 0 && (
-                        <span className="text-xs text-muted-foreground">Tap the mic to begin</span>
+                        <span className="text-[9px] text-muted-foreground tracking-wider" style={{ fontFamily: sans }}>
+                          Tap to begin
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Waveform */}
-                  <div className="w-full">
-                    <WaveformBars active={isActiveRecording} />
-                  </div>
+                  <div className="w-full"><WaveformBars active={isActive} /></div>
 
-                  {/* Controls */}
                   {isRecording && (
-                    <div className="flex gap-2.5 w-full">
+                    <div className="flex gap-2 w-full">
                       {!isPaused ? (
-                        <Button variant="outline" onClick={pauseRecording} className="flex-1 text-foreground">
-                          <Pause className="size-3.5 mr-1.5" />
+                        <Button
+                          variant="outline"
+                          onClick={pauseRecording}
+                          className="flex-1 text-xs uppercase tracking-wider"
+                          style={{ fontFamily: sans, borderRadius: 0, borderColor: "var(--border)", fontSize: 10 }}
+                        >
+                          <Pause style={{ width: 12, height: 12, marginRight: 6 }} />
                           Pause
                         </Button>
                       ) : (
-                        <Button variant="outline" onClick={resumeRecording} className="flex-1 text-foreground">
-                          <Play className="size-3.5 mr-1.5" />
+                        <Button
+                          variant="outline"
+                          onClick={resumeRecording}
+                          className="flex-1 text-xs uppercase tracking-wider"
+                          style={{ fontFamily: sans, borderRadius: 0, borderColor: "var(--border)", fontSize: 10 }}
+                        >
+                          <Play style={{ width: 12, height: 12, marginRight: 6 }} />
                           Resume
                         </Button>
                       )}
-                      <Button onClick={stopRecording} className="flex-1 bg-foreground hover:bg-foreground/90 text-background">
-                        <Square className="size-3.5 mr-1.5" />
+                      <Button
+                        onClick={stopRecording}
+                        className="flex-1 text-xs uppercase tracking-wider"
+                        style={{
+                          fontFamily: sans, borderRadius: 0, fontSize: 10,
+                          backgroundColor: "var(--foreground)", color: "var(--background)",
+                        }}
+                      >
+                        <Square style={{ width: 12, height: 12, marginRight: 6 }} />
                         Stop & Save
                       </Button>
                     </div>
                   )}
 
                   {emotionData.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Waves className="size-3.5" />
-                      <span>{emotionData.length} data points captured</span>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Waves style={{ width: 12, height: 12 }} />
+                      <span className="text-[10px] tabular-nums" style={{ fontFamily: mono }}>
+                        {emotionData.length} data points
+                      </span>
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Current Detection summary */}
+            {/* Score breakdown */}
             {currentEmotion && (
-              <Card className="border border-border shadow-sm bg-card">
-                <CardHeader className="pb-2 pt-4 px-5">
-                  <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Fused Score Breakdown
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-5 pb-5 space-y-2.5">
+              <div>
+                <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
+                  Fused Score Breakdown
+                </p>
+                <div className="border p-4 space-y-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                   {Object.entries(currentEmotion.fused)
                     .sort((a, b) => b[1] - a[1])
                     .map(([emotion, value]) => (
-                    <div key={emotion} className="flex items-center gap-2.5">
-                      <span className="text-xs w-16 capitalize text-muted-foreground">{emotion}</span>
-                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${(value * 100).toFixed(1)}%`,
-                            backgroundColor: EMOTION_COLORS[emotion as Emotion],
-                          }}
-                        />
+                      <div key={emotion} className="flex items-center gap-3">
+                        <span className="text-[9px] w-14 capitalize tracking-wide uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                          {emotion}
+                        </span>
+                        <div className="flex-1 h-1" style={{ backgroundColor: "var(--muted)" }}>
+                          <div
+                            className="h-full transition-all duration-500"
+                            style={{ width: `${(value * 100).toFixed(1)}%`, backgroundColor: EMOTION_COLORS[emotion as Emotion] }}
+                          />
+                        </div>
+                        <span className="text-[10px] tabular-nums w-8 text-right text-muted-foreground" style={{ fontFamily: mono }}>
+                          {(value * 100).toFixed(0)}%
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground tabular-nums w-8 text-right">
-                        {(value * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                    ))}
+                </div>
+              </div>
             )}
           </div>
 
-          {/* ── Right: Transcription + Prediction + Chart ── */}
-          <div className="space-y-4">
+          {/* ── Right panel ── */}
+          <div className="space-y-6">
 
-            {/* ── LIVE TRANSCRIPTION ── */}
-            <div className="rounded-xl border border-border bg-card shadow-sm p-5">
+            {/* Live Transcription */}
+            <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
                   Live Transcription
-                </span>
-                {isActiveRecording && (
-                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-500 uppercase tracking-wide">
-                    <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </p>
+                {isActive && (
+                  <span className="flex items-center gap-1.5 text-[9px] tracking-widest uppercase font-semibold" style={{ color: "#2e7d52", fontFamily: sans }}>
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
                     Streaming
                   </span>
                 )}
               </div>
-              <div className="min-h-[130px] max-h-48 overflow-y-auto rounded-lg border border-border bg-background p-4 space-y-2.5">
-                {transcript.length === 0 ? (
-                  <p className="text-sm text-muted-foreground/40 font-mono select-none">
-                    [Transcribed text will appear here in real-time...]
-                  </p>
-                ) : (
-                  transcript.map((entry, index) => (
-                    <div key={index} className="flex items-start gap-2.5">
-                      <span className="text-[11px] text-muted-foreground/40 tabular-nums pt-0.5 w-7 flex-shrink-0">
-                        {entry.time}s
-                      </span>
-                      <span
-                        className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 font-semibold"
-                        style={{ backgroundColor: EMOTION_BG[entry.emotion], color: EMOTION_COLORS[entry.emotion] }}
-                      >
-                        {entry.emotion}
-                      </span>
-                      <span className="text-sm text-foreground leading-relaxed">{entry.text}</span>
-                    </div>
-                  ))
-                )}
-                <div ref={transcriptEndRef} />
+              <div
+                className="border p-4"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+              >
+                <div
+                  className="min-h-[130px] max-h-48 overflow-y-auto border p-4 space-y-3"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--background)" }}
+                >
+                  {transcript.length === 0 ? (
+                    <p className="text-sm text-muted-foreground/30 italic" style={{ fontFamily: serif }}>
+                      Transcribed text will appear here in real-time...
+                    </p>
+                  ) : (
+                    transcript.map((entry, index) => (
+                      <div key={index} className="flex items-start gap-3">
+                        <span className="text-[10px] text-muted-foreground/40 tabular-nums pt-0.5 w-6 flex-shrink-0" style={{ fontFamily: mono }}>
+                          {entry.time}s
+                        </span>
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-semibold"
+                          style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[entry.emotion], fontFamily: sans }}
+                        >
+                          {entry.emotion}
+                        </span>
+                        <span className="text-sm text-foreground leading-relaxed" style={{ fontFamily: sans, fontWeight: 300 }}>
+                          {entry.text}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                  <div ref={transcriptEndRef} />
+                </div>
               </div>
             </div>
 
-            {/* ── REAL-TIME EMOTION PREDICTION ── */}
-            <div className="rounded-xl border border-border bg-card shadow-sm p-5">
-              {/* Header row */}
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+            {/* Real-Time Prediction */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
                   Real-Time Emotion Prediction
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  <span className={`size-1.5 rounded-full ${isActiveRecording ? "bg-primary animate-pulse" : "bg-muted-foreground/30"}`} />
-                  {isActiveRecording ? "Analyzing" : currentEmotion ? "Last Result" : "Analyzing"}
+                </p>
+                <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-wide text-muted-foreground" style={{ fontFamily: sans }}>
+                  <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: isActive ? "var(--primary)" : "var(--muted-foreground)", opacity: isActive ? 1 : 0.4 }} />
+                  {isActive ? "Analyzing" : currentEmotion ? "Last Result" : "Awaiting Input"}
                 </span>
               </div>
 
-              {/* Column labels row */}
-              <div className="grid grid-cols-3 gap-3 mb-2">
-                <span className="text-xs font-semibold text-foreground">Audio Emotion</span>
-                <span className="text-xs font-semibold text-foreground">Text Emotion</span>
-                <span className="text-xs font-semibold text-foreground">Fused Output (R20)</span>
-              </div>
-
-              {/* Column boxes row */}
-              <div className="grid grid-cols-3 gap-3">
-                {/* Audio — dashed */}
-                <div className="rounded-lg border border-dashed border-border bg-background flex flex-col items-center justify-center py-6 gap-1.5 min-h-[110px]">
-                  {audioResult ? (
-                    <>
-                      <span className="text-2xl mb-0.5">{EMOTION_EMOJI[audioResult.emotion]}</span>
-                      <span className="text-sm font-semibold capitalize" style={{ color: EMOTION_COLORS[audioResult.emotion] }}>
-                        {audioResult.emotion}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Confidence: <span className="font-medium text-foreground">{(audioResult.confidence * 100).toFixed(0)}%</span>
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/40 mt-0.5">60% weight</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-base font-medium text-muted-foreground/50">--</span>
-                      <span className="text-xs text-muted-foreground/50">Confidence: --%</span>
-                    </>
-                  )}
+              <div
+                className="border p-5"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+              >
+                {/* Column labels */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {["Audio Emotion", "Text Emotion", "Fused Output (R20)"].map((label, i) => (
+                    <span
+                      key={label}
+                      className="text-[9px] tracking-[0.14em] uppercase font-semibold"
+                      style={{ fontFamily: sans, color: i === 2 ? "var(--foreground)" : "var(--muted-foreground)" }}
+                    >
+                      {label}
+                    </span>
+                  ))}
                 </div>
 
-                {/* Text — dashed */}
-                <div className="rounded-lg border border-dashed border-border bg-background flex flex-col items-center justify-center py-6 gap-1.5 min-h-[110px]">
-                  {textResult ? (
-                    <>
-                      <span className="text-2xl mb-0.5">{EMOTION_EMOJI[textResult.emotion]}</span>
-                      <span className="text-sm font-semibold capitalize" style={{ color: EMOTION_COLORS[textResult.emotion] }}>
-                        {textResult.emotion}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Confidence: <span className="font-medium text-foreground">{(textResult.confidence * 100).toFixed(0)}%</span>
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/40 mt-0.5">40% weight</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-base font-medium text-muted-foreground/50">--</span>
-                      <span className="text-xs text-muted-foreground/50">Confidence: --%</span>
-                    </>
-                  )}
-                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Audio */}
+                  <div
+                    className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[110px]"
+                    style={{ borderColor: "var(--border)", borderStyle: "dashed", backgroundColor: "var(--background)" }}
+                  >
+                    {audioResult ? (
+                      <>
+                        <span className="text-2xl">{getEmoji(audioResult.emotion)}</span>
+                        <span className="text-sm font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[audioResult.emotion] }}>
+                          {audioResult.emotion}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground" style={{ fontFamily: mono }}>
+                          {(audioResult.confidence * 100).toFixed(0)}% conf.
+                        </span>
+                        <span className="text-[9px] text-muted-foreground/40 tracking-wider uppercase" style={{ fontFamily: sans }}>
+                          60% weight
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground/30 italic" style={{ fontFamily: serif }}>—</span>
+                    )}
+                  </div>
 
-                {/* Fused — solid + muted bg (highlighted per wireframe) */}
-                <div className="rounded-lg border border-border bg-muted/60 flex flex-col items-center justify-center py-6 gap-1.5 min-h-[110px]">
-                  {fusedResult ? (
-                    <>
-                      <span className="text-2xl mb-0.5">{EMOTION_EMOJI[fusedResult.emotion]}</span>
-                      <span className="text-sm font-bold capitalize" style={{ color: EMOTION_COLORS[fusedResult.emotion] }}>
-                        {fusedResult.emotion}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Confidence: <span className="font-semibold text-foreground">{(fusedResult.confidence * 100).toFixed(0)}%</span>
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/40 mt-0.5">Fused · final</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-base font-medium text-muted-foreground/50">--</span>
-                      <span className="text-xs text-muted-foreground/50">Confidence: --%</span>
-                    </>
-                  )}
+                  {/* Text */}
+                  <div
+                    className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[110px]"
+                    style={{ borderColor: "var(--border)", borderStyle: "dashed", backgroundColor: "var(--background)" }}
+                  >
+                    {textResult ? (
+                      <>
+                        <span className="text-2xl">{getEmoji(textResult.emotion)}</span>
+                        <span className="text-sm font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[textResult.emotion] }}>
+                          {textResult.emotion}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground" style={{ fontFamily: mono }}>
+                          {(textResult.confidence * 100).toFixed(0)}% conf.
+                        </span>
+                        <span className="text-[9px] text-muted-foreground/40 tracking-wider uppercase" style={{ fontFamily: sans }}>
+                          40% weight
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground/30 italic" style={{ fontFamily: serif }}>—</span>
+                    )}
+                  </div>
+
+                  {/* Fused */}
+                  <div
+                    className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[110px]"
+                    style={{ borderColor: "var(--foreground)", backgroundColor: "var(--muted)" }}
+                  >
+                    {fusedResult ? (
+                      <>
+                        <span className="text-2xl">{getEmoji(fusedResult.emotion)}</span>
+                        <span className="text-sm font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[fusedResult.emotion] }}>
+                          {fusedResult.emotion}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground" style={{ fontFamily: mono }}>
+                          {(fusedResult.confidence * 100).toFixed(0)}% conf.
+                        </span>
+                        <span className="text-[9px] text-muted-foreground/50 tracking-wider uppercase" style={{ fontFamily: sans }}>
+                          Fused · final
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground/30 italic" style={{ fontFamily: serif }}>—</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* ── Emotion Timeline Chart ── */}
+            {/* Timeline chart */}
             {emotionData.length > 0 && (
-              <div className="rounded-xl border border-border bg-card shadow-sm p-5">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest block mb-4">
+              <div>
+                <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
                   Emotion Timeline
-                </span>
-                <ResponsiveContainer width="100%" height={230}>
-                  <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="time" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                    <Tooltip
-                      contentStyle={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "10px",
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
-                        fontSize: 12,
-                        color: "var(--card-foreground)",
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Line type="monotone" dataKey="happy" stroke={EMOTION_COLORS.happy} strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="sad" stroke={EMOTION_COLORS.sad} strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="angry" stroke={EMOTION_COLORS.angry} strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="neutral" stroke={EMOTION_COLORS.neutral} strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="fearful" stroke={EMOTION_COLORS.fearful} strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="surprised" stroke={EMOTION_COLORS.surprised} strokeWidth={1.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+                </p>
+                <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                      <XAxis dataKey="time" tick={axisStyle} />
+                      <YAxis tick={axisStyle} />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Legend wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }} />
+                      {(Object.keys(EMOTION_COLORS) as Emotion[]).map((e) => (
+                        <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={1.5} dot={false} />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             )}
           </div>
@@ -555,4 +528,11 @@ export function LiveRecording() {
       </div>
     </div>
   );
+}
+
+function getEmoji(emotion: Emotion): string {
+  const map: { [key in Emotion]: string } = {
+    happy: "😊", sad: "😢", angry: "😠", neutral: "😐", fearful: "😨", surprised: "😮",
+  };
+  return map[emotion];
 }
