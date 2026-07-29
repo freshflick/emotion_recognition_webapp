@@ -12,7 +12,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
 import {
   generateMockEmotionData, generateMockTranscript, addSession,
@@ -24,21 +23,6 @@ const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
   neutral: "#786c5c", fearful: "#7a3a8a", surprised: "#2e7d52",
 };
-const EMOTION_EMOJI: { [key in Emotion]: string } = {
-  happy: "😊",
-  sad: "😢",
-  angry: "😠",
-  neutral: "😐",
-  fearful: "😨",
-  surprised: "😮",
-};
-
-function getDominantWithScore(scores: { [key in Emotion]: number }) {
-  const entries = Object.entries(scores) as [Emotion, number][];
-  const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
-  return { emotion: dominant[0], confidence: dominant[1] };
-}
-
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
 const mono = "'IBM Plex Mono', monospace";
@@ -71,87 +55,87 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
   const columns = [
     { label: "Audio Model", emotion: audioDominant, confidence: audioConf, weight: "60% weight" },
     { label: "Text Model", emotion: textDominant, confidence: textConf, weight: "40% weight" },
-    { label: "Fused Output", emotion: fusedDominant, confidence: fusedConf, weight: "Final · R20" },
+    { label: "Fused Output", emotion: fusedDominant, confidence: fusedConf, weight: "Final" },
   ];
 
   return (
-    <div className="border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-      {/* Header row */}
-      <div
-        className="flex items-center justify-between px-5 py-3 border-b"
-        style={{ borderColor: "var(--border)" }}
-      >
+      <div className="border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+        {/* Header row */}
+        <div
+            className="flex items-center justify-between px-5 py-3 border-b"
+            style={{ borderColor: "var(--border)" }}
+        >
         <span
-          className="text-[9px] tracking-[0.22em] uppercase text-foreground font-semibold"
-          style={{ fontFamily: sans }}
+            className="text-[11px] tracking-[0.22em] uppercase text-foreground font-normal"
+            style={{ fontFamily: sans }}
         >
           Current Emotion Status
         </span>
-        <span
-          className="text-[9px] tracking-[0.1em] px-2.5 py-1 border text-muted-foreground"
-          style={{ borderColor: "var(--border)", fontFamily: mono }}
-        >
-          R20: High Reliability Fusion (Audio + Text)
+          <span
+              className="text-[11px] tracking-[0.1em] px-2.5 py-1 border text-muted-foreground font-normal"
+              style={{ borderColor: "var(--border)", fontFamily: mono }}
+          >
+          High Reliability Fusion (Audio + Text)
         </span>
-      </div>
+        </div>
 
-      {/* Three columns */}
-      <div className="grid grid-cols-3 divide-x" style={{ borderColor: "var(--border)" }}>
-        {columns.map(({ label, emotion, confidence, weight }, i) => (
-          <div key={label} className="p-5">
-            <p
-              className="text-[9px] tracking-[0.14em] uppercase text-muted-foreground mb-3"
-              style={{ fontFamily: sans }}
-            >
-              {label}
-            </p>
+        {/* Three columns */}
+        <div className="grid grid-cols-3 divide-x" style={{ borderColor: "var(--border)" }}>
+          {columns.map(({ label, emotion, confidence, weight }, i) => (
+              <div key={label} className="p-5">
+                <p
+                    className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground font-normal mb-3"
+                    style={{ fontFamily: sans }}
+                >
+                  {label}
+                </p>
 
-            {/* Dashed emotion box */}
-            <div
-              className="flex items-center justify-center py-5 mb-3"
-              style={{
-                border: "1.5px dashed var(--border)",
-                backgroundColor: "var(--background)",
-              }}
-            >
+                {/* Dashed emotion box */}
+                <div
+                    className="flex items-center justify-center py-5 mb-3"
+                    style={{
+                      border: "1.5px dashed var(--border)",
+                      backgroundColor: "var(--background)",
+                    }}
+                >
               <span
-                className="text-xl font-bold uppercase tracking-widest"
-                style={{ fontFamily: serif, color: EMOTION_COLORS[emotion] }}
+                  className="text-2xl font-bold uppercase tracking-widest"
+                  style={{ fontFamily: serif, color: EMOTION_COLORS[emotion] }}
               >
                 {emotion}
               </span>
-            </div>
+                </div>
 
-            {/* Confidence bar */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between">
+                {/* Confidence bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between">
                 <span
-                  className="text-[9px] uppercase tracking-wider text-muted-foreground"
-                  style={{ fontFamily: sans }}
+                    className="text-[11px] uppercase tracking-wider text-muted-foreground font-normal"
+                    style={{ fontFamily: sans }}
                 >
                   {weight}
                 </span>
-                <span
-                  className="text-[9px] tabular-nums text-muted-foreground"
-                  style={{ fontFamily: mono }}
-                >
+                    <span
+                        className="text-[11px] tabular-nums text-muted-foreground font-normal"
+                        style={{ fontFamily: mono }}
+                    >
                   {(confidence * 100).toFixed(0)}%
                 </span>
+                  </div>
+                  <div className="h-1.5 w-full" style={{ backgroundColor: "var(--muted)" }}>
+                    <div
+                        className="h-full transition-all duration-500"
+                        style={{
+                          width: `${(confidence * 100).toFixed(0)}%`,
+                          backgroundColor: i === 2 ? "var(--foreground)" : EMOTION_COLORS[emotion],
+                        }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="h-1.5 w-full" style={{ backgroundColor: "var(--muted)" }}>
-                <div
-                  className="h-full transition-all duration-500"
-                  style={{
-                    width: `${(confidence * 100).toFixed(0)}%`,
-                    backgroundColor: i === 2 ? "var(--foreground)" : EMOTION_COLORS[emotion],
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
   );
 }
 
@@ -162,75 +146,75 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
   if (sessions.length === 0) return null;
 
   return (
-    <div className="border" style={{ borderColor: "var(--border)" }}>
-      {/* Header */}
-      <div className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+      <div className="border" style={{ borderColor: "var(--border)" }}>
+        {/* Header */}
+        <div className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
         <span
-          className="text-[9px] tracking-[0.22em] uppercase text-foreground font-semibold"
-          style={{ fontFamily: sans }}
+            className="text-[11px] tracking-[0.22em] uppercase text-foreground font-normal"
+            style={{ fontFamily: sans }}
         >
           Recent Uploads
         </span>
-      </div>
+        </div>
 
-      {/* List */}
-      <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-        {sessions.map((session, i) => {
-          const dominant = session.summary.dominantEmotion;
-          return (
-            <div
-              key={session.id}
-              className="flex items-center gap-4 px-5 py-4"
-            >
-              {/* File icon */}
-              <div
-                className="flex-shrink-0 flex items-center justify-center border"
-                style={{
-                  width: 40, height: 40,
-                  borderColor: "var(--border)",
-                  backgroundColor: "var(--muted)",
-                }}
-              >
-                <FileAudio style={{ width: 16, height: 16, color: "var(--muted-foreground)" }} />
-              </div>
+        {/* List */}
+        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          {sessions.map((session, i) => {
+            const dominant = session.summary.dominantEmotion;
+            return (
+                <div
+                    key={session.id}
+                    className="flex items-center gap-4 px-5 py-4"
+                >
+                  {/* File icon */}
+                  <div
+                      className="flex-shrink-0 flex items-center justify-center border"
+                      style={{
+                        width: 40, height: 40,
+                        borderColor: "var(--border)",
+                        backgroundColor: "var(--muted)",
+                      }}
+                  >
+                    <FileAudio style={{ width: 16, height: 16, color: "var(--muted-foreground)" }} />
+                  </div>
 
-              {/* Metadata */}
-              <div className="flex-1 min-w-0">
-                <p
-                  className="text-sm font-semibold text-foreground truncate"
-                  style={{ fontFamily: sans }}
-                >
-                  recording_{i + 1}.wav
-                </p>
-                <p
-                  className="text-[10px] text-muted-foreground mt-0.5"
-                  style={{ fontFamily: sans }}
-                >
-                  {formatDuration(session.duration)}&nbsp;·&nbsp;
-                  Uploaded {timeAgo(session.timestamp)}&nbsp;·&nbsp;
-                  <span style={{ color: EMOTION_COLORS[dominant] }} className="capitalize">
+                  {/* Metadata */}
+                  <div className="flex-1 min-w-0">
+                    <p
+                        className="text-sm font-normal text-foreground truncate"
+                        style={{ fontFamily: sans }}
+                    >
+                      recording_{i + 1}.wav
+                    </p>
+                    <p
+                        className="text-xs text-muted-foreground mt-0.5 font-normal"
+                        style={{ fontFamily: sans }}
+                    >
+                      {formatDuration(session.duration)}&nbsp;·&nbsp;
+                      Uploaded {timeAgo(session.timestamp)}&nbsp;·&nbsp;
+                      <span style={{ color: EMOTION_COLORS[dominant] }} className="capitalize">
                     {dominant}
                   </span>
-                </p>
-              </div>
+                    </p>
+                  </div>
 
-              {/* View button */}
-              <button
-                className="flex-shrink-0 px-3 py-1.5 border text-[9px] tracking-[0.14em] uppercase transition-colors hover:bg-muted"
-                style={{
-                  borderColor: "var(--border)",
-                  fontFamily: sans,
-                  color: "var(--foreground)",
-                }}
-                onClick={() => onViewSession?.(session)}
-              >
-                View
-              </button>
-            </div>
-          );
-        })}
+                  {/* View button */}
+                  <button
+                      className="flex-shrink-0 px-3 py-1.5 border text-[11px] tracking-[0.14em] uppercase font-normal transition-colors hover:bg-muted"
+                      style={{
+                        borderColor: "var(--border)",
+                        fontFamily: sans,
+                        color: "var(--foreground)",
+                      }}
+                      onClick={() => onViewSession?.(session)}
+                  >
+                    View
+                  </button>
+                </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
   );
 }
 
@@ -262,7 +246,7 @@ export function FileAnalysis() {
       const timestamp = Math.floor((i / dataPoints) * duration);
       const transcript = generateMockTranscript();
       const newEmotion = generateMockEmotionData(timestamp, transcript);
-      
+
       setEmotionData((prev) => [...prev, newEmotion]);
       setProgress(((i + 1) / (dataPoints + 1)) * 100);
     }
@@ -282,12 +266,12 @@ export function FileAnalysis() {
 
   const chartData = emotionData.map((data) => ({
     time: `${data.timestamp}s`,
-    fa_happy: (data.fused.happy * 100).toFixed(1),
-    fa_sad: (data.fused.sad * 100).toFixed(1),
-    fa_angry: (data.fused.angry * 100).toFixed(1),
-    fa_neutral: (data.fused.neutral * 100).toFixed(1),
-    fa_fearful: (data.fused.fearful * 100).toFixed(1),
-    fa_surprised: (data.fused.surprised * 100).toFixed(1),
+    happy: Number((data.fused.happy * 100).toFixed(1)),
+    sad: Number((data.fused.sad * 100).toFixed(1)),
+    angry: Number((data.fused.angry * 100).toFixed(1)),
+    neutral: Number((data.fused.neutral * 100).toFixed(1)),
+    fearful: Number((data.fused.fearful * 100).toFixed(1)),
+    surprised: Number((data.fused.surprised * 100).toFixed(1)),
   }));
 
   const latestEmotion = emotionData[emotionData.length - 1] ?? null;
@@ -296,231 +280,234 @@ export function FileAnalysis() {
     background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
     boxShadow: "none", color: "var(--card-foreground)", fontSize: 11, fontFamily: sans,
   };
-  const axisStyle = { fontSize: 10, fill: "var(--muted-foreground)", fontFamily: sans };
+  const axisStyle = { fontSize: 11, fill: "var(--muted-foreground)", fontFamily: sans };
 
   return (
-    <div className="p-8 bg-background min-h-full">
-      <div className="max-w-5xl mx-auto">
+      <div className="p-8 bg-background min-h-full">
+        <div className="max-w-5xl mx-auto">
 
-        {/* Header */}
-        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-          <p className="text-[9px] tracking-[0.22em] uppercase text-muted-foreground mb-2" style={{ fontFamily: sans }}>
-            — File Analysis / Audio Upload
-          </p>
-          <h1
-            className="font-bold text-foreground leading-tight"
-            style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
-          >
-            Audio File{" "}
-            <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Analysis</em>
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
-            Upload audio recordings for comprehensive multimodal emotion analysis.
-          </p>
-        </div>
+          {/* Header */}
+          <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+            <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal mb-2" style={{ fontFamily: sans }}>
+              — FILE ANALYSIS / AUDIO UPLOAD
+            </p>
+            <h1
+                className="font-bold text-foreground leading-tight"
+                style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
+            >
+              Audio File{" "}
+              <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Analysis</em>
+            </h1>
+            <p className="text-xs text-muted-foreground mt-1.5 font-normal" style={{ fontFamily: sans }}>
+              Upload audio recordings for comprehensive multimodal emotion analysis.
+            </p>
+          </div>
 
-        {/* ML Signal status */}
-        <div className="flex flex-wrap gap-4 mb-8">
-          {[
-            { label: "RoBERTa NLP", status: isProcessing ? "processing" : "ready", color: isProcessing ? "#7a3a8a" : "#2e7d52" },
-            { label: "Speech Encoder", status: isProcessing ? "active" : "standby", color: isProcessing ? "#2e7d52" : "var(--muted-foreground)" },
-            { label: "Fusion Model", status: analysisComplete ? "done" : isProcessing ? "running" : "idle", color: analysisComplete ? "#2e7d52" : isProcessing ? "#1e5f8a" : "var(--muted-foreground)" },
-          ].map((s) => (
-            <div key={s.label} className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
-              <span className="text-[9px] tracking-widest uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+          {/* ML Signal status */}
+          <div className="flex flex-wrap gap-4 mb-8">
+            {[
+              { label: "RoBERTa NLP", status: isProcessing ? "processing" : "ready", color: isProcessing ? "#7a3a8a" : "#2e7d52" },
+              { label: "Speech Encoder", status: isProcessing ? "active" : "standby", color: isProcessing ? "#2e7d52" : "var(--muted-foreground)" },
+              { label: "Fusion Model", status: analysisComplete ? "done" : isProcessing ? "running" : "idle", color: analysisComplete ? "#2e7d52" : isProcessing ? "#1e5f8a" : "var(--muted-foreground)" },
+            ].map((s) => (
+                <div key={s.label} className="flex items-center gap-2">
+                  <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
+                  <span className="text-[11px] tracking-widest uppercase text-muted-foreground font-normal" style={{ fontFamily: sans }}>
                 {s.label}
               </span>
-              <span className="text-[9px] tracking-widest uppercase font-semibold" style={{ color: s.color, fontFamily: sans }}>
+                  <span className="text-[11px] tracking-widest uppercase font-normal" style={{ color: s.color, fontFamily: sans }}>
                 {s.status}
               </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Upload zone */}
-        <div className="mb-8">
-          <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
-            Upload Audio File
-          </p>
-          <div
-            className="border transition-colors cursor-pointer"
-            style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <div className="p-12 text-center border-b border-dashed" style={{ borderColor: "var(--border)" }}>
-              <Upload
-                className="mx-auto mb-4"
-                style={{ width: 36, height: 36, color: "var(--muted-foreground)", opacity: 0.4 }}
-              />
-              <p
-                className="text-base mb-1.5"
-                style={{ fontFamily: serif, fontWeight: 700, color: "var(--foreground)" }}
-              >
-                {selectedFile ? selectedFile.name : "Click to upload audio"}
-              </p>
-              <p className="text-[10px] text-muted-foreground tracking-wide uppercase" style={{ fontFamily: sans }}>
-                MP3 · WAV · M4A · OGG — Max 50 MB
-              </p>
-              <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileSelect} className="hidden" />
-            </div>
-
-            {selectedFile && (
-              <div className="flex items-center gap-4 p-4 border-t" style={{ borderColor: "var(--border)" }}>
-                <FileAudio style={{ width: 28, height: 28, color: "var(--primary)" }} />
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-foreground" style={{ fontFamily: sans }}>{selectedFile.name}</div>
-                  <div className="text-[10px] text-muted-foreground tabular-nums" style={{ fontFamily: mono }}>
-                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                  </div>
                 </div>
-                {analysisComplete && <CheckCircle2 style={{ width: 18, height: 18, color: "#2e7d52" }} />}
+            ))}
+          </div>
+
+          {/* Upload zone */}
+          <div className="mb-8">
+            <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
+              Upload Audio File
+            </p>
+            <div
+                className="border transition-colors cursor-pointer"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+                onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="p-12 text-center border-b border-dashed" style={{ borderColor: "var(--border)" }}>
+                <Upload
+                    className="mx-auto mb-4"
+                    style={{ width: 36, height: 36, color: "var(--muted-foreground)", opacity: 0.4 }}
+                />
+                <p
+                    className="text-base mb-1.5 font-bold"
+                    style={{ fontFamily: serif, color: "var(--foreground)" }}
+                >
+                  {selectedFile ? selectedFile.name : "Click to upload audio"}
+                </p>
+                <p className="text-xs text-muted-foreground tracking-wide uppercase font-normal" style={{ fontFamily: sans }}>
+                  MP3 · WAV · M4A · OGG — Max 50 MB
+                </p>
+                <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileSelect} className="hidden" />
               </div>
+
+              {selectedFile && (
+                  <div className="flex items-center gap-4 p-4 border-t" style={{ borderColor: "var(--border)" }}>
+                    <FileAudio style={{ width: 28, height: 28, color: "var(--primary)" }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-normal text-foreground" style={{ fontFamily: sans }}>{selectedFile.name}</div>
+                      <div className="text-xs text-muted-foreground tabular-nums font-normal" style={{ fontFamily: mono }}>
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                      </div>
+                    </div>
+                    {analysisComplete && <CheckCircle2 style={{ width: 18, height: 18, color: "#2e7d52" }} />}
+                  </div>
+              )}
+            </div>
+
+            {selectedFile && !analysisComplete && (
+                <div className="mt-4 space-y-3">
+                  <Button
+                      className="w-full text-[11px] tracking-[0.15em] uppercase py-3 font-normal"
+                      onClick={analyzeFile}
+                      disabled={isProcessing}
+                      style={{
+                        fontFamily: sans, borderRadius: 0, height: "auto",
+                        backgroundColor: "var(--foreground)", color: "var(--background)",
+                      }}
+                  >
+                    {isProcessing ? (
+                        <><Loader2 style={{ width: 13, height: 13, marginRight: 8 }} className="animate-spin" />Processing... {progress.toFixed(0)}%</>
+                    ) : (
+                        <><Upload style={{ width: 13, height: 13, marginRight: 8 }} />Analyze Audio</>
+                    )}
+                  </Button>
+                  {isProcessing && (
+                      <div className="space-y-1.5">
+                        <Progress value={progress} className="h-0.5 rounded-none" />
+                        <p className="text-[11px] tracking-widest uppercase text-muted-foreground text-center font-normal" style={{ fontFamily: sans }}>
+                          Extracting emotion features...
+                        </p>
+                      </div>
+                  )}
+                </div>
             )}
           </div>
 
-          {selectedFile && !analysisComplete && (
-            <div className="mt-4 space-y-3">
-              <Button
-                className="w-full text-[10px] tracking-[0.15em] uppercase py-3"
-                onClick={analyzeFile}
-                disabled={isProcessing}
-                style={{
-                  fontFamily: sans, borderRadius: 0, height: "auto",
-                  backgroundColor: "var(--foreground)", color: "var(--background)",
-                }}
-              >
-                {isProcessing ? (
-                  <><Loader2 style={{ width: 13, height: 13, marginRight: 8 }} className="animate-spin" />Processing... {progress.toFixed(0)}%</>
-                ) : (
-                  <><Upload style={{ width: 13, height: 13, marginRight: 8 }} />Analyze Audio</>
-                )}
-              </Button>
-              {isProcessing && (
-                <div className="space-y-1.5">
-                  <Progress value={progress} className="h-0.5 rounded-none" />
-                  <p className="text-[9px] tracking-widest uppercase text-muted-foreground text-center" style={{ fontFamily: sans }}>
-                    Extracting emotion features...
-                  </p>
-                </div>
-              )}
-            </div>
+          {/* ── Current Emotion Status ── */}
+          {latestEmotion && (
+              <div className="mb-8">
+                <CurrentEmotionStatus latestEmotion={latestEmotion} />
+              </div>
           )}
-        </div>
 
-        {/* ── Current Emotion Status (shows during and after analysis) ── */}
-        {latestEmotion && (
-          <div className="mb-8">
-            <CurrentEmotionStatus latestEmotion={latestEmotion} />
-          </div>
-        )}
+          {/* Results */}
+          {analysisComplete && emotionData.length > 0 && (
+              <>
+                {/* Summary */}
+                <div className="mb-8">
+                  <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
+                    Analysis Summary
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    {Object.entries(
+                        emotionData.reduce((acc, data) => {
+                          acc[data.dominantEmotion] = (acc[data.dominantEmotion] || 0) + 1;
+                          return acc;
+                        }, {} as Record<Emotion, number>)
+                    )
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 3)
+                        .map(([emotion, count]) => (
+                            <div key={emotion} className="border-l-2 pl-4 py-1" style={{ borderColor: EMOTION_COLORS[emotion as Emotion] }}>
+                              <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 capitalize font-normal" style={{ fontFamily: sans }}>
+                                {emotion}
+                              </p>
+                              <div className="text-2xl font-bold" style={{ fontFamily: serif, color: EMOTION_COLORS[emotion as Emotion] }}>
+                                {count}×
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-normal" style={{ fontFamily: sans }}>occurrences</p>
+                            </div>
+                        ))}
+                  </div>
+                </div>
 
-        {/* Results */}
-        {analysisComplete && emotionData.length > 0 && (
-          <>
-            {/* Summary */}
-            <div className="mb-8">
-              <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
-                Analysis Summary
-              </p>
-              <div className="grid grid-cols-3 gap-4">
-                {Object.entries(
-                  emotionData.reduce((acc, data) => {
-                    acc[data.dominantEmotion] = (acc[data.dominantEmotion] || 0) + 1;
-                    return acc;
-                  }, {} as Record<Emotion, number>)
-                )
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 3)
-                  .map(([emotion, count]) => (
-                    <div key={emotion} className="border-l-2 pl-4 py-1" style={{ borderColor: EMOTION_COLORS[emotion as Emotion] }}>
-                      <p className="text-[9px] tracking-widest uppercase text-muted-foreground mb-1 capitalize" style={{ fontFamily: sans }}>
-                        {emotion}
-                      </p>
-                      <div className="text-2xl font-bold" style={{ fontFamily: serif, color: EMOTION_COLORS[emotion as Emotion] }}>
-                        {count}×
-                      </div>
-                      <p className="text-[9px] text-muted-foreground" style={{ fontFamily: sans }}>occurrences</p>
-                    </div>
-                  ))}
-              </div>
-            </div>
+                {/* Timeline chart */}
+                <div className="mb-8">
+                  <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
+                    Emotion Timeline
+                  </p>
+                  <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                        <XAxis dataKey="time" tick={axisStyle} />
+                        <YAxis tick={axisStyle} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend wrapperStyle={{ fontSize: 11, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }} />
+                        {(Object.keys(EMOTION_COLORS) as Emotion[]).map((e) => (
+                            <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={1.5} dot={false} />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
 
-            {/* Timeline chart */}
-            <div className="mb-8">
-              <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
-                Emotion Timeline
-              </p>
-              <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-                <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
-                    <XAxis dataKey="time" tick={axisStyle} />
-                    <YAxis tick={axisStyle} />
-                    <Tooltip contentStyle={tooltipStyle} />
-                    <Legend wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }} />
-                    {(Object.keys(EMOTION_COLORS) as Emotion[]).map((e) => (
-                      <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={1.5} dot={false} />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Transcript */}
-            <div className="mb-8">
-              <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
-                Generated Transcript
-              </p>
-              <div className="border p-4 space-y-2" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-                {emotionData.map((data, index) => (
-                  <div key={index} className="flex items-start gap-3 text-sm border-b py-2" style={{ borderColor: "var(--border)" }}>
-                    <span className="text-[10px] text-muted-foreground/50 tabular-nums w-8 flex-shrink-0 pt-0.5" style={{ fontFamily: mono }}>
+                {/* Transcript */}
+                <div className="mb-8">
+                  <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
+                    Generated Transcript
+                  </p>
+                  <div className="border p-4 space-y-2" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                    {emotionData.map((data, index) => (
+                        <div key={index} className="flex items-start gap-3 text-sm border-b py-2" style={{ borderColor: "var(--border)" }}>
+                    <span className="text-[11px] text-muted-foreground/50 tabular-nums w-8 flex-shrink-0 pt-0.5 font-normal" style={{ fontFamily: mono }}>
                       [{data.timestamp}s]
                     </span>
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-semibold"
-                      style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[data.dominantEmotion], fontFamily: sans }}
-                    >
+                          <span
+                              className="text-[11px] px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-normal"
+                              style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[data.dominantEmotion], fontFamily: sans }}
+                          >
                       {data.dominantEmotion}
                     </span>
-                    <span className="text-sm text-foreground" style={{ fontFamily: sans, fontWeight: 300 }}>
+                          <span className="text-sm text-foreground font-normal" style={{ fontFamily: sans }}>
                       {data.transcript}
                     </span>
+                        </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 mb-8">
-              <Button
-                variant="outline"
-                onClick={() => { setSelectedFile(null); setAnalysisComplete(false); setEmotionData([]); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                style={{ fontFamily: sans, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 0, borderColor: "var(--border)" }}
-              >
-                Analyze Another File
-              </Button>
-              <Button
-                onClick={() => navigate("/")}
-                style={{ fontFamily: sans, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 0, backgroundColor: "var(--foreground)", color: "var(--background)" }}
-              >
-                Dashboard
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => navigate("/reports")}
-                style={{ fontFamily: sans, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 0, borderColor: "var(--border)" }}
-              >
-                Generate Report
-              </Button>
-            </div>
-          </>
-        )}
+                {/* Actions */}
+                <div className="flex gap-3 mb-8">
+                  <Button
+                      variant="outline"
+                      onClick={() => { setSelectedFile(null); setAnalysisComplete(false); setEmotionData([]); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      style={{ fontFamily: sans, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 0, borderColor: "var(--border)" }}
+                      className="font-normal"
+                  >
+                    Analyze Another File
+                  </Button>
+                  <Button
+                      onClick={() => navigate("/")}
+                      style={{ fontFamily: sans, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 0, backgroundColor: "var(--foreground)", color: "var(--background)" }}
+                      className="font-normal"
+                  >
+                    Dashboard
+                  </Button>
+                  <Button
+                      variant="outline"
+                      onClick={() => navigate("/reports")}
+                      style={{ fontFamily: sans, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 0, borderColor: "var(--border)" }}
+                      className="font-normal"
+                  >
+                    Generate Report
+                  </Button>
+                </div>
+              </>
+          )}
 
-        {/* ── Recent Uploads ── */}
-        <RecentUploads />
+          {/* ── Recent Uploads ── */}
+          <RecentUploads />
+        </div>
       </div>
-    </div>
   );
 }

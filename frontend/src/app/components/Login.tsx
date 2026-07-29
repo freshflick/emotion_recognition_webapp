@@ -54,10 +54,10 @@ export function Login() {
 
         <div className="relative z-10 space-y-6 mt-12">
           <div>
-            <h1 className="text-4xl font-bold leading-tight text-left">
+            <h1 className="text-4xl text-primary-foreground font-bold leading-tight text-left">
               Understand emotions in real time
             </h1>
-            <p className="text-lg leading-relaxed max-w-sm text-left mt-6">
+            <p className="text-lg text-primary-foreground leading-relaxed max-w-sm text-left mt-6">
               Multimodal AI that fuses audio and language signals to surface emotional states with confidence.
             </p>
           </div>
