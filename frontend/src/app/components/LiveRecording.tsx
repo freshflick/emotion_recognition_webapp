@@ -86,6 +86,7 @@ export function LiveRecording() {
   const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
+  // @ts-ignore
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(0);

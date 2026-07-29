@@ -1,6 +1,7 @@
-import { Outlet, Link, useLocation } from "react-router";
-import { Activity, Mic, Upload, FileText, BarChart3, Settings } from "lucide-react";
+import { Outlet, Link, useLocation, useNavigate } from "react-router";
+import { Activity, Mic, Upload, FileText, BarChart3, Settings, LogOut } from "lucide-react";
 import { useUser } from "../contexts/UserContext";
+import { useAuth } from "../contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 
 const STATUS_ITEMS = [
@@ -11,11 +12,13 @@ const STATUS_ITEMS = [
 
 export function Root() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useUser();
+  const { logout } = useAuth();
 
   const navItems = [
     { path: "/", label: "Dashboard", icon: Activity },
-    { path: "/live", label: "Live Recording", icon: Mic },
+    { path: "/live", label: "Live Analysis", icon: Mic },
     { path: "/upload", label: "File Analysis", icon: Upload },
     { path: "/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/reports", label: "Reports", icon: FileText },
@@ -113,6 +116,13 @@ export function Root() {
             <Settings className="size-4" />
             <span>Settings</span>
           </Link>
+          <button
+            onClick={() => { logout(); navigate("/login"); }}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full text-left text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all"
+          >
+            <LogOut className="size-4" />
+            <span>Sign out</span>
+          </button>
         </div>
       </aside>
 

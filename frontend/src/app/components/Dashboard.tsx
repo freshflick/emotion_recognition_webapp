@@ -50,7 +50,7 @@ export function Dashboard() {
 
   const pieData = Object.entries(emotionDistribution).map(([emotion, value]) => ({
     name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-    value,
+    db_value: value,
     color: EMOTION_COLORS[emotion as Emotion],
   }));
 
@@ -62,7 +62,7 @@ export function Dashboard() {
   const trendData = sessions.slice(0, 8).reverse().map((session, index) => {
     const data: any = { name: `S${index + 1}` };
     Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
-      data[emotion] = parseFloat((value * 100).toFixed(1));
+      data[`db_${emotion}`] = parseFloat((value * 100).toFixed(1));
     });
     return data;
   });
@@ -117,7 +117,7 @@ export function Dashboard() {
         <Link to="/live">
           <Button className="w-full h-16 bg-primary hover:bg-primary/90 text-primary-foreground gap-2 shadow-sm" size="lg">
             <Mic className="size-4" />
-            Start Live Recording
+            Start Live Analysis
           </Button>
         </Link>
         <Link to="/upload">
@@ -161,10 +161,10 @@ export function Dashboard() {
             </div>
             <h3 className="text-base font-medium text-foreground mb-2">No sessions yet</h3>
             <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
-              Start a live recording or upload an audio file to begin analyzing emotions
+              Start a live analysis or upload an audio file to begin analyzing emotions
             </p>
             <div className="flex gap-3 justify-center">
-              <Link to="/live"><Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm">Start Live Recording</Button></Link>
+              <Link to="/live"><Button className="bg-primary hover:bg-primary/90 text-primary-foreground text-sm">Start Live Analysis</Button></Link>
               <Link to="/upload"><Button variant="outline" className="text-sm border-border">Upload File</Button></Link>
             </div>
           </CardContent>
@@ -180,7 +180,7 @@ export function Dashboard() {
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" labelLine={false}
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={90} dataKey="value">
+                    outerRadius={90} dataKey="db_value">
                     {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle} />
@@ -219,7 +219,7 @@ export function Dashboard() {
                   <Tooltip contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {(["happy", "sad", "angry", "neutral"] as Emotion[]).map((e) => (
-                    <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={2} dot={false} />
+                    <Line key={e} type="monotone" dataKey={`db_${e}`} name={e} stroke={EMOTION_COLORS[e]} strokeWidth={2} dot={false} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
