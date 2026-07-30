@@ -99,13 +99,13 @@ export function LiveRecording() {
       setEmotionData([]);
       setTranscript([]);
       setCurrentEmotion(null);
-      toast.success("Recording started");
+      toast.success("Analysis started");
     } catch { toast.error("Could not access microphone"); }
   };
 
   const pauseRecording = () => {
     setIsPaused(true);
-    toast.info("Recording paused");
+    toast.info("Analysis paused");
   };
 
   const resumeRecording = () => {
@@ -113,7 +113,7 @@ export function LiveRecording() {
     pausedTimeRef.current += pauseStartTime - startTimeRef.current;
     startTimeRef.current = pauseStartTime;
     setIsPaused(false);
-    toast.info("Recording resumed");
+    toast.info("Analysis resumed");
   };
 
   const stopRecording = () => {
@@ -133,7 +133,7 @@ export function LiveRecording() {
     });
     setIsRecording(false);
     setIsPaused(false);
-    toast.success("Recording saved successfully");
+    toast.success("Analysis saved successfully");
     setTimeout(() => navigate("/"), 1500);
   };
 
@@ -176,14 +176,14 @@ export function LiveRecording() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-2" style={{ fontFamily: sans }}>
-                  — Live Session / Multimodal Emotion Recording
+                  — Live Session / Multimodal Emotion Analysis
                 </p>
                 <h1
                     className="font-bold text-foreground leading-tight"
                     style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
                 >
                   Live Emotion{" "}
-                  <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Recording</em>
+                  <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Analysis</em>
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
                   Real-time audio-text fusion · attention-based multimodal analysis
@@ -232,7 +232,7 @@ export function LiveRecording() {
             <div className="space-y-6">
               <div>
                 <p className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
-                  Recording Control
+                  Analysis Control
                 </p>
                 <div
                     className="border"
@@ -286,7 +286,7 @@ export function LiveRecording() {
                       <div className="mt-2 h-4 flex items-center justify-center">
                         {isActive && (
                             <span className="text-xs tracking-[0.2em] uppercase font-semibold" style={{ color: "var(--primary)", fontFamily: sans }}>
-                          Recording
+                          Analysing
                         </span>
                         )}
                         {isPaused && (

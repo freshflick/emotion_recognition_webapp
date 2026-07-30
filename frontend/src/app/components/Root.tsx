@@ -17,7 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 
 const NAV_ITEMS = [
     { path: "/", label: "Dashboard", icon: Activity },
-    { path: "/live", label: "Live Recording", icon: Mic },
+    { path: "/live", label: "Live Analysis", icon: Mic },
     { path: "/upload", label: "File Analysis", icon: Upload },
     { path: "/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/reports", label: "Reports", icon: FileText },
