@@ -185,7 +185,7 @@ export function Dashboard() {
                             }}
                         >
                             <Mic className="size-4" />
-                            Start Live Recording
+                            Start Live Analysis
                         </Button>
                     </Link>
                     <Link to="/upload">
@@ -242,7 +242,7 @@ export function Dashboard() {
                         className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto"
                         style={{ fontFamily: sans, fontWeight: 300 }}
                     >
-                        Start a live recording or upload an audio file to begin analysis.
+                        Start a live analysis or upload an audio file to begin analysis.
                     </p>
                     <div className="flex gap-3 justify-center">
                         <Link to="/live">
@@ -258,7 +258,7 @@ export function Dashboard() {
                                     fontWeight: 600,
                                 }}
                             >
-                                Start Live Recording
+                                Start Live Analysis
                             </Button>
                         </Link>
                         <Link to="/upload">
