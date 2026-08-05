@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -13,11 +14,12 @@ const mono = "'IBM Plex Mono', monospace";
 
 export function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signIn, signUp, isDevMode } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,12 +27,46 @@ export function Login() {
       toast.error("Please fill in all fields");
       return;
     }
+    if (mode === "signup" && password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    login(email);
-    toast.success("Welcome back!");
-    navigate("/");
-    setIsLoading(false);
+    try {
+      if (mode === "signup") {
+        const { needsConfirmation } = await signUp(email, password);
+        if (needsConfirmation) {
+          toast.success("Account created — check your email to confirm it.");
+          setMode("signin");
+          return;
+        }
+      } else {
+        await signIn(email, password);
+      }
+      toast.success(mode === "signup" ? "Account created!" : "Welcome back!");
+      // No navigate() needed on success — routes.tsx redirects away from
+      // /login as soon as the auth state flips.
+      navigate("/");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (isDevMode) {
+      toast.info("Password reset needs Supabase configured (see .env.example)");
+      return;
+    }
+    if (!email) {
+      toast.error("Enter your email address first");
+      return;
+    }
+    const { error } = await supabase!.auth.resetPasswordForEmail(email);
+    if (error) toast.error(error.message);
+    else toast.success("Password reset link sent — check your email.");
   };
 
   return (
@@ -109,10 +145,12 @@ export function Login() {
                 — ACCESS PORTAL
               </p>
               <h2 className="text-2xl font-bold text-foreground" style={{ fontFamily: serif }}>
-                Sign in
+                {mode === "signup" ? "Create account" : "Sign in"}
               </h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Enter your credentials to access your analytics dashboard.
+                {mode === "signup"
+                  ? "Register to start analysing and saving sessions."
+                  : "Enter your credentials to access your analytics dashboard."}
               </p>
             </div>
 
@@ -145,7 +183,7 @@ export function Login() {
                   <button
                       type="button"
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
-                      onClick={() => toast.info("Password reset coming soon")}
+                      onClick={handleForgotPassword}
                       style={{ fontFamily: sans }}
                   >
                     Forgot password?
@@ -161,7 +199,7 @@ export function Login() {
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-9 pr-9 rounded-none border text-xs bg-background h-10"
                       style={{ borderColor: "var(--border)", fontFamily: mono }}
-                      autoComplete="current-password"
+                      autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   />
                   <button
                       type="button"
@@ -187,42 +225,43 @@ export function Login() {
                 {isLoading ? (
                     <span className="flex items-center gap-2">
                   <span className="size-3.5 rounded-full border-2 border-background/30 border-t-background animate-spin" />
-                  Authenticating…
+                  {mode === "signup" ? "Creating account…" : "Authenticating…"}
                 </span>
                 ) : (
                     <>
-                      Sign in <ArrowRight className="size-3.5" />
+                      {mode === "signup" ? "Create account" : "Sign in"}{" "}
+                      <ArrowRight className="size-3.5" />
                     </>
                 )}
               </Button>
             </form>
 
-            {/* Demo Credentials Box */}
-            <div className="mt-8 p-4 border bg-card" style={{ borderColor: "var(--border)" }}>
-              <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground font-medium mb-2" style={{ fontFamily: sans }}>
-                Demo Access Credentials
-              </p>
-              <div className="space-y-1 text-xs text-muted-foreground font-mono" style={{ fontFamily: mono }}>
-                <div className="flex justify-between">
-                  <span>Email:</span>
-                  <span className="text-foreground select-all font-semibold">demo@emotionmonitor.ai</span>
+            {/* Dev-mode notice — only when Supabase isn't configured, so it
+                disappears by itself once real credentials are in .env */}
+            {isDevMode && (
+                <div className="mt-8 p-4 border bg-card" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground font-medium mb-2" style={{ fontFamily: sans }}>
+                    Local Development Mode
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: sans }}>
+                    No Supabase credentials found, so any email and password will
+                    sign you in and sessions won't be saved between reloads.
+                    Add <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_URL</span> and{" "}
+                    <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_ANON_KEY</span> to{" "}
+                    <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>.env</span> to enable real accounts.
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span>Password:</span>
-                  <span className="text-foreground select-all font-semibold">any password works</span>
-                </div>
-              </div>
-            </div>
+            )}
 
-            {/* Sign Up Redirect */}
+            {/* Sign in / Sign up toggle */}
             <p className="text-center text-xs text-muted-foreground mt-6 font-normal" style={{ fontFamily: sans }}>
-              Don't have an account?{" "}
+              {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
               <button
                   type="button"
-                  onClick={() => toast.info("Contact administrator for access")}
+                  onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
                   className="text-foreground font-semibold hover:underline"
               >
-                Request Access
+                {mode === "signin" ? "Create one" : "Sign in"}
               </button>
             </p>
           </div>

@@ -33,7 +33,7 @@ export function Root() {
     const location = useLocation();
     const navigate = useNavigate();
     const { user } = useUser();
-    const { logout } = useAuth();
+    const { signOut } = useAuth();
 
     // Live Date and Time State
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -249,8 +249,8 @@ export function Root() {
                     </Link>
 
                     <button
-                        onClick={() => {
-                            logout();
+                        onClick={async () => {
+                            await signOut();
                             navigate("/login");
                         }}
                         className="flex items-center gap-3 px-2 py-2 rounded-md text-xs font-medium uppercase tracking-wider w-full text-left text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all"

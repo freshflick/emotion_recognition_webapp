@@ -10,13 +10,26 @@ import { Profile } from "./components/Profile";
 import { Login } from "./components/Login";
 import { useAuth } from "./contexts/AuthContext";
 
+// Restoring a Supabase session is asynchronous. Without this gate, a page
+// refresh would briefly see isAuthenticated === false and bounce a signed-in
+// user to /login before the session resolves.
+function AuthPending() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <span className="size-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+    </div>
+  );
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <AuthPending />;
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function RedirectIfAuthed() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <AuthPending />;
   return isAuthenticated ? <Navigate to="/" replace /> : <Login />;
 }
 
