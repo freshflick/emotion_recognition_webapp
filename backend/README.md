@@ -49,8 +49,13 @@ pip install -r requirements.txt
 #   Windows: choco install ffmpeg (or download binary + add to PATH)
 
 cp .env.example .env
-# fill in Supabase URL / service role key / JWT secret
 ```
+
+The defaults in `.env.example` run without a checkpoint or Supabase project:
+`USE_MOCK_MODEL=true` serves randomised predictions in the real response
+shape, and `DISABLE_AUTH=true` accepts requests without a token. Both are
+announced loudly at startup and surfaced in the UI, so nobody mistakes
+placeholder output for results. Turn them off as the real pieces land.
 
 **Dependencies** (see `requirements.txt`):
 
@@ -100,34 +105,74 @@ Open `http://localhost:8000/docs` — you can call `/api/analyze-file`
 directly from that page (upload a WAV, hit "Execute") without writing any
 frontend code at all.
 
-## API contract (what your frontend will eventually call)
+## API contract
 
-**`POST /api/analyze-file`** — upload one audio file, get one result back.
-Requires `Authorization: Bearer <supabase_jwt>` header.
+The frontend implements the client side of all of this in
+`frontend/src/app/api/` — if you change a shape here, change it there too.
+
+All routes require `Authorization: Bearer <supabase_jwt>` unless
+`DISABLE_AUTH=true`.
+
+**`GET /api/health`** — no auth. Reports which subsystems are actually live;
+the UI uses it to drive its status indicators.
 
 ```json
-// response
+{"status": "ok", "model_loaded": true, "mock_mode": false,
+ "auth_disabled": false, "persistence_enabled": true,
+ "labels": ["Neutral", "Happy", "Sad", "Angry"]}
+```
+
+**`POST /api/analyze-file`** — upload one audio file, get a timeline back.
+
+The model's input window is a fixed 8 seconds, so longer files are split into
+consecutive windows and predicted separately — otherwise a 2-minute recording
+would be truncated to its first 8 seconds and reported as the whole file.
+`emotion` is the highest-confidence window, for callers wanting one headline.
+
+```json
 {
-  "transcript": "I can't believe you did that",
-  "emotion": {
-    "probs": {"Neutral": 0.05, "Happy": 0.02, "Sad": 0.10, "Angry": 0.83},
-    "top_label": "Angry",
-    "confidence": 0.83
-  },
+  "transcript": "full transcript, all segments joined",
+  "emotion": { "...": "highest-confidence segment, shape below" },
+  "segments": [
+    {
+      "start": 0.0, "end": 8.0,
+      "transcript": "I can't believe you did that",
+      "emotion": {
+        "probs": {"Neutral": 0.05, "Happy": 0.02, "Sad": 0.10, "Angry": 0.83},
+        "top_label": "Angry",
+        "confidence": 0.83,
+        "modality_weights": {"audio": 0.71, "text": 0.29}
+      }
+    }
+  ],
+  "duration_secs": 42.3,
   "report_id": "..."
 }
 ```
 
+`modality_weights` is the `modality_judge` softmax — the model's learned,
+per-utterance answer to "how far do I trust the voice vs the words here?".
+Note this is a *trust weighting*, not a per-modality prediction: there's one
+classifier over the fused vector, so an audio-only emotion label isn't
+something this architecture can produce.
+
 **`WS /ws/live-session`** — live streaming audio.
-1. First message (JSON): `{"token": "<supabase_jwt>"}`
-2. Then send raw audio bytes as binary WebSocket frames continuously
-   (whatever `MediaRecorder` produces)
-3. Server sends back a JSON message every few seconds:
-   `{"transcript": "...", "emotion": {...same shape as above...}}`
-4. To end early, send text frame: `{"action": "end"}`
+
+1. First message (JSON): `{"token": "<jwt>", "format": "pcm16", "sampleRate": 16000}`
+2. Server replies `{"type": "ready", ...}` once auth passes
+3. Client streams **raw 16kHz mono PCM16** as binary frames
+4. Server sends `{"type": "reading", "transcript": "...", "emotion": {...}}`
+   every ~4 seconds of audio
+5. Client sends `{"action": "end"}`; server flushes the final partial chunk,
+   persists the session, replies `{"type": "summary", "reportId": "..."}`
+
+> **Not MediaRecorder output.** MediaRecorder's WebM/Opus is only decodable as
+> a complete file — chunks after the first have no container header, so
+> decoding one in isolation fails. The client taps the Web Audio graph and
+> sends headerless PCM instead, which can be sliced anywhere. See
+> `frontend/src/app/api/liveSession.ts`.
 
 **`GET /api/reports`** — list a user's past sessions/reports.
-Requires the same `Authorization` header.
 
 ## Required Supabase setup (dashboard, not code)
 
