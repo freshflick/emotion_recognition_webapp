@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import {
     LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -8,7 +8,7 @@ import { Brain, Mic, Upload } from "lucide-react";
 import { Button } from "./ui/button";
 import { useUser } from "../contexts/UserContext";
 import { getTimeBasedGreeting, getSessionQuote } from "../utils/userProfile";
-import { getSessions } from "../utils/emotionEngine";
+import { useSessionStore } from "../utils/emotionEngine";
 import type { Emotion } from "../utils/emotionEngine";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
@@ -58,14 +58,9 @@ function StatBlock({
 
 export function Dashboard() {
     const { user } = useUser();
-    const [sessions, setSessions] = useState(getSessions());
+    const sessions = useSessionStore();
     const [quote] = useState(getSessionQuote());
     const [greeting] = useState(getTimeBasedGreeting());
-
-    useEffect(() => {
-        const interval = setInterval(() => setSessions(getSessions()), 5000);
-        return () => clearInterval(interval);
-    }, []);
 
     const totalSessions = sessions.length;
     const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);

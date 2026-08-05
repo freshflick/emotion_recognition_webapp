@@ -14,9 +14,12 @@ import {
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import {
-  generateMockEmotionData, generateMockTranscript, addSession,
-  calculateSessionSummary, getSessions, type EmotionData, type Emotion, type Session,
+  addSession, calculateSessionSummary, getSessions,
+  type EmotionData, type Emotion, type Session,
 } from "../utils/emotionEngine";
+import { segmentsToEmotionData } from "../api/adapters";
+import { analyzeFile as analyzeFileApi } from "../api/client";
+import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
@@ -46,16 +49,37 @@ function timeAgo(timestamp: number) {
   return `${diffDays}d ago`;
 }
 
-/* ── Current Emotion Status Panel ── */
+/* ── Current Emotion Status Panel ──
+   The model produces one fused prediction, not per-modality labels — what
+   varies by modality is the trust weighting it learned for this utterance.
+   So: the real prediction, then the real audio/text split beside it. */
 function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData }) {
-  const [audioDominant, audioConf] = getDominant(latestEmotion.audio);
-  const [textDominant, textConf] = getDominant(latestEmotion.text);
   const [fusedDominant, fusedConf] = getDominant(latestEmotion.fused);
+  const weights = latestEmotion.modalityWeights;
 
   const columns = [
-    { label: "Audio Model", emotion: audioDominant, confidence: audioConf, weight: "60% weight" },
-    { label: "Text Model", emotion: textDominant, confidence: textConf, weight: "40% weight" },
-    { label: "Fused Output", emotion: fusedDominant, confidence: fusedConf, weight: "Final" },
+    {
+      label: "Fused Prediction",
+      emotion: fusedDominant,
+      confidence: fusedConf,
+      weight: "Model output",
+    },
+    ...(weights
+      ? [
+          {
+            label: "Audio Trust",
+            emotion: fusedDominant,
+            confidence: weights.audio,
+            weight: "Weight given to voice",
+          },
+          {
+            label: "Text Trust",
+            emotion: fusedDominant,
+            confidence: weights.text,
+            weight: "Weight given to words",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -75,12 +99,15 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
               className="text-[11px] tracking-[0.1em] px-2.5 py-1 border text-muted-foreground font-normal"
               style={{ borderColor: "var(--border)", fontFamily: mono }}
           >
-          High Reliability Fusion (Audio + Text)
+          {latestEmotion.isMock ? "Placeholder result — no checkpoint" : "Gated Fusion (Audio + Text)"}
         </span>
         </div>
 
-        {/* Three columns */}
-        <div className="grid grid-cols-3 divide-x" style={{ borderColor: "var(--border)" }}>
+        {/* Prediction, then the learned modality trust split */}
+        <div
+            className="grid divide-x"
+            style={{ borderColor: "var(--border)", gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}
+        >
           {columns.map(({ label, emotion, confidence, weight }, i) => (
               <div key={label} className="p-5">
                 <p
@@ -90,7 +117,8 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
                   {label}
                 </p>
 
-                {/* Dashed emotion box */}
+                {/* Column 0 is the predicted emotion; the trust columns show
+                    the weight itself, not a repeat of the same label. */}
                 <div
                     className="flex items-center justify-center py-5 mb-3"
                     style={{
@@ -98,15 +126,24 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
                       backgroundColor: "var(--background)",
                     }}
                 >
-              <span
-                  className="text-2xl font-bold uppercase tracking-widest"
-                  style={{ fontFamily: serif, color: EMOTION_COLORS[emotion] }}
-              >
-                {emotion}
-              </span>
+                  {i === 0 ? (
+                      <span
+                          className="text-2xl font-bold uppercase tracking-widest"
+                          style={{ fontFamily: serif, color: EMOTION_COLORS[emotion] }}
+                      >
+                        {emotion}
+                      </span>
+                  ) : (
+                      <span
+                          className="text-2xl font-bold tabular-nums"
+                          style={{ fontFamily: serif, color: "var(--foreground)" }}
+                      >
+                        {(confidence * 100).toFixed(0)}%
+                      </span>
+                  )}
                 </div>
 
-                {/* Confidence bar */}
+                {/* Confidence / weight bar */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between">
                 <span
@@ -127,7 +164,7 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
                         className="h-full transition-all duration-500"
                         style={{
                           width: `${(confidence * 100).toFixed(0)}%`,
-                          backgroundColor: i === 2 ? "var(--foreground)" : EMOTION_COLORS[emotion],
+                          backgroundColor: i === 0 ? EMOTION_COLORS[emotion] : "var(--foreground)",
                         }}
                     />
                   </div>
@@ -184,7 +221,7 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
                         className="text-sm font-normal text-foreground truncate"
                         style={{ fontFamily: sans }}
                     >
-                      recording_{i + 1}.wav
+                      {session.filename ?? `upload_${i + 1}`}
                     </p>
                     <p
                         className="text-xs text-muted-foreground mt-0.5 font-normal"
@@ -219,8 +256,11 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
 }
 
 /* ── Main FileAnalysis page ── */
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // matches the backend's limit
+
 export function FileAnalysis() {
   const navigate = useNavigate();
+  const { health, isMock, refreshSessions } = useSessions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -228,40 +268,78 @@ export function FileAnalysis() {
   const [emotionData, setEmotionData] = useState<EmotionData[]>([]);
   const [analysisComplete, setAnalysisComplete] = useState(false);
 
+  const backendReachable = health !== null;
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith("audio/")) { toast.error("Please select an audio file"); return; }
-      setSelectedFile(file); setAnalysisComplete(false); setEmotionData([]);
-      toast.success("File selected");
+    if (!file) return;
+
+    // Some browsers report an empty type for .m4a/.ogg, so fall back to the
+    // extension rather than rejecting a valid file.
+    const looksLikeAudio =
+      file.type.startsWith("audio/") ||
+      /\.(mp3|wav|m4a|ogg|flac|webm)$/i.test(file.name);
+    if (!looksLikeAudio) {
+      toast.error("Please select an audio file");
+      return;
     }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error("File is larger than the 50 MB limit");
+      return;
+    }
+
+    setSelectedFile(file);
+    setAnalysisComplete(false);
+    setEmotionData([]);
+    toast.success("File selected");
   };
 
   const analyzeFile = async () => {
     if (!selectedFile) return;
-    setIsProcessing(true); setProgress(0); setEmotionData([]);
-    const duration = 30; const dataPoints = 15;
-    for (let i = 0; i <= dataPoints; i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      const timestamp = Math.floor((i / dataPoints) * duration);
-      const transcript = generateMockTranscript();
-      const newEmotion = generateMockEmotionData(timestamp, transcript);
+    setIsProcessing(true);
+    setProgress(0);
+    setEmotionData([]);
 
-      setEmotionData((prev) => [...prev, newEmotion]);
-      setProgress(((i + 1) / (dataPoints + 1)) * 100);
+    // The backend returns one response when the whole file is done, so there
+    // is no real progress to report. This creeps toward 90% at a rate scaled
+    // to file size, then jumps to 100% on completion — honest about being an
+    // estimate, and better than a bar that sits at 0.
+    const estimatedMs = Math.max(3000, (selectedFile.size / 1_000_000) * 4000);
+    const startedAt = Date.now();
+    const ticker = setInterval(() => {
+      setProgress(Math.min(90, ((Date.now() - startedAt) / estimatedMs) * 90));
+    }, 200);
+
+    try {
+      const result = await analyzeFileApi(selectedFile);
+      const data = segmentsToEmotionData(result.segments);
+
+      setEmotionData(data);
+      setProgress(100);
+      setAnalysisComplete(true);
+
+      addSession({
+        id: result.report_id ?? `local-${Date.now()}`,
+        timestamp: Date.now(),
+        duration: Math.round(result.duration_secs),
+        type: "upload",
+        filename: selectedFile.name,
+        emotionData: data,
+        summary: calculateSessionSummary(data),
+      });
+
+      if (result.report_id) {
+        toast.success("Analysis complete");
+        void refreshSessions();
+      } else {
+        toast.warning("Analysis complete, but it could not be saved to the server");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      clearInterval(ticker);
+      setIsProcessing(false);
     }
-
-    // Save session
-    const allEmotionData: EmotionData[] = [];
-    for (let i = 0; i <= dataPoints; i++) {
-      const timestamp = Math.floor((i / dataPoints) * duration);
-      allEmotionData.push(generateMockEmotionData(timestamp, generateMockTranscript()));
-    }
-
-    const summary = calculateSessionSummary(allEmotionData);
-    addSession({ id: `session-${Date.now()}`, timestamp: Date.now(), duration, type: "upload", emotionData: allEmotionData, summary });
-    setIsProcessing(false); setAnalysisComplete(true);
-    toast.success("Analysis complete!");
   };
 
   const chartData = emotionData.map((data) => ({
@@ -303,12 +381,24 @@ export function FileAnalysis() {
             </p>
           </div>
 
-          {/* ML Signal status */}
+          {/* ML Signal status — driven by the real backend, via /api/health */}
           <div className="flex flex-wrap gap-4 mb-8">
             {[
-              { label: "RoBERTa NLP", status: isProcessing ? "processing" : "ready", color: isProcessing ? "#7a3a8a" : "#2e7d52" },
-              { label: "Speech Encoder", status: isProcessing ? "active" : "standby", color: isProcessing ? "#2e7d52" : "var(--muted-foreground)" },
-              { label: "Fusion Model", status: analysisComplete ? "done" : isProcessing ? "running" : "idle", color: analysisComplete ? "#2e7d52" : isProcessing ? "#1e5f8a" : "var(--muted-foreground)" },
+              {
+                label: "Backend",
+                status: backendReachable ? "connected" : "offline",
+                color: backendReachable ? "#2e7d52" : "#b8312f",
+              },
+              {
+                label: "Speech Encoder",
+                status: !backendReachable ? "offline" : isMock ? "mock" : isProcessing ? "active" : "standby",
+                color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : isProcessing ? "#2e7d52" : "var(--muted-foreground)",
+              },
+              {
+                label: "Fusion Model",
+                status: !backendReachable ? "offline" : isMock ? "mock" : analysisComplete ? "done" : isProcessing ? "running" : health?.model_loaded ? "loaded" : "no checkpoint",
+                color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : analysisComplete ? "#2e7d52" : isProcessing ? "#1e5f8a" : health?.model_loaded ? "#2e7d52" : "#b8312f",
+              },
             ].map((s) => (
                 <div key={s.label} className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
@@ -321,6 +411,27 @@ export function FileAnalysis() {
                 </div>
             ))}
           </div>
+
+          {!backendReachable && (
+              <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#b8312f", backgroundColor: "var(--card)" }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "#b8312f", fontFamily: sans }}>
+                  Backend unreachable
+                </p>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: sans }}>
+                  Start it with <span style={{ fontFamily: mono }}>cd backend &amp;&amp; uvicorn main:app --reload --port 8000</span>, then reload this page.
+                </p>
+              </div>
+          )}
+          {backendReachable && isMock && (
+              <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#c07c20", backgroundColor: "var(--card)" }}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "#c07c20", fontFamily: sans }}>
+                  Mock mode
+                </p>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: sans }}>
+                  Results below are randomised placeholders — the trained checkpoint isn't loaded. Your file is still uploaded and segmented for real.
+                </p>
+              </div>
+          )}
 
           {/* Upload zone */}
           <div className="mb-8">
@@ -368,7 +479,7 @@ export function FileAnalysis() {
                   <Button
                       className="w-full text-[11px] tracking-[0.15em] uppercase py-3 font-normal"
                       onClick={analyzeFile}
-                      disabled={isProcessing}
+                      disabled={isProcessing || !backendReachable}
                       style={{
                         fontFamily: sans, borderRadius: 0, height: "auto",
                         backgroundColor: "var(--foreground)", color: "var(--background)",

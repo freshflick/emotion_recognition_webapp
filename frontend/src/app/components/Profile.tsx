@@ -8,7 +8,7 @@ import { Textarea } from "./ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { useUser } from "../contexts/UserContext";
 import { toast } from "sonner";
-import { getSessions } from "../utils/emotionEngine";
+import { useSessionStore } from "../utils/emotionEngine";
 
 export function Profile() {
   const { user, updateUserProfile } = useUser();
@@ -21,7 +21,7 @@ export function Profile() {
     avatar: user.avatar || "",
   });
 
-  const sessions = getSessions();
+  const sessions = useSessionStore();
   const totalSessions = sessions.length;
   const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
   const memberSince = new Date(user.createdAt).toLocaleDateString();

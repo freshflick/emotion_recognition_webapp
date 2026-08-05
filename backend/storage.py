@@ -4,11 +4,22 @@ the browser). FastAPI is the only thing allowed to write final results —
 this keeps report integrity out of the client's hands.
 """
 from datetime import datetime, timezone
-from supabase import create_client, Client
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+from supabase import Client, create_client
+
+from config import SUPABASE_ENABLED, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL
 
 _client: Client | None = None
+
+
+def is_enabled() -> bool:
+    """
+    False when no Supabase credentials are configured. The API still serves
+    predictions in that state — it just can't persist or list them, so every
+    write below no-ops and reads come back empty rather than crashing. This
+    keeps the app usable for local development before the project is set up.
+    """
+    return SUPABASE_ENABLED
 
 
 def get_client() -> Client:
@@ -27,6 +38,9 @@ def save_session_report(user_id: str, report: dict) -> dict:
         created_at (timestamptz, default now())
         data (jsonb)
     """
+    if not is_enabled():
+        return {}
+
     client = get_client()
     result = (
         client.table("emotion_reports")
@@ -45,8 +59,12 @@ def save_session_report(user_id: str, report: dict) -> dict:
 def upload_audio_file(user_id: str, filename: str, file_bytes: bytes) -> str:
     """
     Uploads raw audio to a Supabase Storage bucket named 'audio-uploads'.
-    Returns the storage path. Create the bucket in the Supabase dashboard first.
+    Returns the storage path, or "" when persistence is disabled.
+    Create the bucket in the Supabase dashboard first.
     """
+    if not is_enabled():
+        return ""
+
     client = get_client()
     path = f"{user_id}/{datetime.now(timezone.utc).timestamp()}_{filename}"
     client.storage.from_("audio-uploads").upload(
@@ -56,6 +74,9 @@ def upload_audio_file(user_id: str, filename: str, file_bytes: bytes) -> str:
 
 
 def get_user_reports(user_id: str, limit: int = 50) -> list[dict]:
+    if not is_enabled():
+        return []
+
     client = get_client()
     result = (
         client.table("emotion_reports")

@@ -8,7 +8,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { getSessions, type Emotion } from "../utils/emotionEngine";
+import { useSessionStore, type Emotion } from "../utils/emotionEngine";
 import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
@@ -26,7 +26,7 @@ export function Reports() {
   const [appliedRange, setAppliedRange] = useState<{ start: string; end: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const sessions = getSessions();
+  const sessions = useSessionStore();
 
   // Apply date range filter
   const handleApplyFilter = () => {

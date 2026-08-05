@@ -23,7 +23,7 @@ import {
 } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { getSessions, type Emotion } from "../utils/emotionEngine";
+import { useSessionStore, type Emotion } from "../utils/emotionEngine";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20",
@@ -66,7 +66,7 @@ function ChartShell({ title, children }: { title: string; children: React.ReactN
 
 export function Analytics() {
   const [timeRange, setTimeRange] = useState<TimeRange>("week");
-  const sessions = getSessions();
+  const sessions = useSessionStore();
 
   // Filter sessions by time range
   const filterByTimeRange = (range: TimeRange) => {
