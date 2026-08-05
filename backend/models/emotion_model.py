@@ -74,7 +74,18 @@ class FusionEmotionModel(nn.Module):
             nn.Linear(512, num_labels),
         )
 
-    def forward(self, audio_values, input_ids, attention_mask, rms_energies, intensities):
+    def forward(
+        self,
+        audio_values,
+        input_ids,
+        attention_mask,
+        rms_energies,
+        intensities,
+        return_trust: bool = False,
+    ):
+        # `return_trust` is inference-only sugar — it adds no parameters, so
+        # checkpoints stay loadable and training behaviour is unchanged. It
+        # surfaces the modality_judge scores the API reports to the UI.
         audio_feats = []
         for enc in self.audio_encoders:
             out = enc(audio_values, output_hidden_states=True)
@@ -102,6 +113,9 @@ class FusionEmotionModel(nn.Module):
 
         fused = torch.cat(weighted_audio + [weighted_text, extra_feats], dim=-1)
         logits = self.classifier(fused)
+
+        if return_trust:
+            return logits, trust_scores
         return logits
 
 
@@ -110,28 +124,80 @@ _model: FusionEmotionModel | None = None
 _audio_processor = None
 _text_tokenizer = None
 _device = "cpu"
+_mock_mode = False
 
 
 def load_model(checkpoint_path: str, device: str = "cpu"):
     """
     Loads your trained checkpoint (the .pt file train.py saves to
     outputs/models/fusion_model.pt). Call once at app startup.
+
+    train.py may have saved either a bare state_dict or a wrapper dict with
+    the weights under "model_state_dict"/"state_dict" — both are accepted, so
+    you don't have to re-export the checkpoint to match one convention.
     """
-    global _model, _audio_processor, _text_tokenizer, _device
+    global _model, _audio_processor, _text_tokenizer, _device, _mock_mode
     _device = device
+    _mock_mode = False
 
     _audio_processor = AutoFeatureExtractor.from_pretrained(AUDIO_MODEL_NAMES[0])
     _text_tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
 
     _model = FusionEmotionModel()
-    state = torch.load(checkpoint_path, map_location=device)
+    state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    if isinstance(state, dict):
+        for key in ("model_state_dict", "state_dict"):
+            if key in state and isinstance(state[key], dict):
+                state = state[key]
+                break
+    elif isinstance(state, nn.Module):
+        # Checkpoint was saved with torch.save(model) rather than the
+        # state_dict — pull the weights back out.
+        state = state.state_dict()
+
     _model.load_state_dict(state)
     _model.to(device)
     _model.eval()
 
 
+def enable_mock_mode():
+    """
+    Serve randomised predictions in the real response shape.
+
+    Used when no trained checkpoint is available yet, so the frontend, the
+    WebSocket protocol and persistence can all be built and demoed end-to-end
+    before training finishes. Responses carry "mock": true so the UI can badge
+    them and nobody mistakes them for real results.
+    """
+    global _mock_mode
+    _mock_mode = True
+
+
 def is_loaded() -> bool:
     return _model is not None
+
+
+def is_mock() -> bool:
+    return _mock_mode
+
+
+def _mock_predict() -> dict:
+    import random
+
+    weights = [random.random() for _ in LABEL_NAMES]
+    total = sum(weights)
+    prob_dict = {label: w / total for label, w in zip(LABEL_NAMES, weights)}
+    top_label = max(prob_dict, key=prob_dict.get)
+
+    audio_w = random.uniform(0.35, 0.75)
+    return {
+        "probs": prob_dict,
+        "top_label": top_label,
+        "confidence": prob_dict[top_label],
+        "modality_weights": {"audio": audio_w, "text": 1.0 - audio_w},
+        "mock": True,
+    }
 
 
 def predict(waveform, text: str) -> dict:
@@ -142,8 +208,24 @@ def predict(waveform, text: str) -> dict:
               so inference matches the distribution the model was trained on)
     text:     transcript string (from Whisper)
 
-    Returns: {"probs": {label: float}, "top_label": str, "confidence": float}
+    Returns:
+      {
+        "probs": {label: float},
+        "top_label": str,
+        "confidence": float,
+        "modality_weights": {"audio": float, "text": float},
+      }
+
+    `modality_weights` is the modality_judge softmax — the model's learned,
+    per-utterance answer to "how far do I trust the voice vs the words here?".
+    The UI shows these instead of a hardcoded audio/text split. Note this is a
+    trust weighting, NOT a per-modality emotion prediction: the architecture
+    has a single classifier over the fused vector, so an audio-only or
+    text-only emotion label is not something this model can produce.
     """
+    if _mock_mode:
+        return _mock_predict()
+
     if _model is None:
         raise RuntimeError("Model not loaded — call load_model() at startup")
 
@@ -173,8 +255,16 @@ def predict(waveform, text: str) -> dict:
     intensity = intensity.to(_device)
 
     with torch.no_grad():
-        logits = _model(audio_values, input_ids, attention_mask, rms_energy, intensity)
+        logits, trust_scores = _model(
+            audio_values,
+            input_ids,
+            attention_mask,
+            rms_energy,
+            intensity,
+            return_trust=True,
+        )
         probs = torch.softmax(logits, dim=-1).squeeze().cpu().numpy()
+        trust = trust_scores.squeeze().cpu().numpy()
 
     prob_dict = {label: float(p) for label, p in zip(LABEL_NAMES, probs)}
     top_label = max(prob_dict, key=prob_dict.get)
@@ -183,4 +273,5 @@ def predict(waveform, text: str) -> dict:
         "probs": prob_dict,
         "top_label": top_label,
         "confidence": prob_dict[top_label],
+        "modality_weights": {"audio": float(trust[0]), "text": float(trust[1])},
     }
