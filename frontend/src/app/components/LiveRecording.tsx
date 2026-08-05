@@ -13,9 +13,11 @@ import {
 } from "recharts";
 import { Button } from "./ui/button";
 import {
-  generateMockEmotionData, generateMockTranscript, addSession,
-  calculateSessionSummary, type EmotionData, type Emotion,
+  addSession, calculateSessionSummary, type EmotionData, type Emotion,
 } from "../utils/emotionEngine";
+import { LiveSession } from "../api/liveSession";
+import { toEmotionData } from "../api/adapters";
+import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
@@ -27,20 +29,44 @@ const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
 const mono = "'IBM Plex Mono', monospace";
 
-function WaveformBars({ active }: { active: boolean }) {
+/**
+ * Scrolling display of real microphone level. `level` is the peak amplitude
+ * (0..1) of the most recent audio frame, pushed up from LiveSession — these
+ * bars now reflect actual input rather than an animation, so a dead mic is
+ * visible immediately instead of looking like it's working.
+ */
+function WaveformBars({ active, level }: { active: boolean; level: number }) {
+  const BARS = 32;
+  const [history, setHistory] = useState<number[]>(() => new Array(BARS).fill(0));
+
+  useEffect(() => {
+    if (!active) {
+      setHistory(new Array(BARS).fill(0));
+      return;
+    }
+    // Sampled on an interval rather than on every frame: audio callbacks fire
+    // far faster than the display needs, and re-rendering on each would churn.
+    const id = setInterval(() => {
+      setHistory((prev) => [...prev.slice(1), levelRef.current]);
+    }, 60);
+    return () => clearInterval(id);
+  }, [active]);
+
+  const levelRef = useRef(level);
+  levelRef.current = level;
+
   return (
       <div className="flex items-center justify-center gap-[2px] h-8">
-        {Array.from({ length: 32 }).map((_, i) => (
+        {history.map((v, i) => (
             <div
                 key={i}
                 style={{
                   width: 2,
                   backgroundColor: active ? "var(--primary)" : "var(--muted-foreground)",
-                  opacity: active ? 0.6 : 0.2,
-                  height: active ? `${20 + Math.random() * 60}%` : "15%",
-                  animation: active ? `waveBar ${0.5 + (i % 5) * 0.12}s ease-in-out infinite alternate` : "none",
-                  animationDelay: `${(i * 0.04) % 0.5}s`,
-                  transition: "height 0.15s ease",
+                  opacity: active ? 0.35 + Math.min(v * 2, 1) * 0.65 : 0.2,
+                  // sqrt curve: quiet speech is otherwise almost invisible
+                  height: active ? `${Math.max(8, Math.sqrt(Math.min(v, 1)) * 100)}%` : "15%",
+                  transition: "height 0.08s linear, opacity 0.08s linear",
                 }}
             />
         ))}
@@ -56,55 +82,103 @@ function getDominantWithScore(scores: { [key in Emotion]: number }) {
 
 export function LiveRecording() {
   const navigate = useNavigate();
+  const { health, isMock, refreshSessions } = useSessions();
   const [isRecording, setIsRecording] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [level, setLevel] = useState(0);
   const [emotionData, setEmotionData] = useState<EmotionData[]>([]);
   const [currentEmotion, setCurrentEmotion] = useState<EmotionData | null>(null);
   const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
-  // @ts-ignore
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionRef = useRef<LiveSession | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(0);
 
+  // Elapsed-time display only. Predictions arrive from the server whenever a
+  // chunk completes — they are not on this clock.
   useEffect(() => {
     if (isRecording && !isPaused) {
       intervalRef.current = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTimeRef.current - pausedTimeRef.current) / 1000);
-        setDuration(elapsed);
-        if (elapsed % 2 === 0 && elapsed > 0) {
-          const newTranscript = generateMockTranscript();
-          const newEmotion = generateMockEmotionData(elapsed, newTranscript);
-          setEmotionData((prev) => [...prev, newEmotion]);
-          setCurrentEmotion(newEmotion);
-          setTranscript((prev) => [...prev, { time: elapsed, text: newTranscript, emotion: newEmotion.dominantEmotion }]);
-        }
+        setDuration(
+          Math.floor((Date.now() - startTimeRef.current - pausedTimeRef.current) / 1000),
+        );
       }, 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isRecording, isPaused]);
 
+  // Releases the mic and socket if the user navigates away mid-session.
+  useEffect(() => () => sessionRef.current?.teardown(), []);
+
   useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [transcript]);
 
   const startRecording = async () => {
+    setIsConnecting(true);
+    setEmotionData([]);
+    setTranscript([]);
+    setCurrentEmotion(null);
+    setDuration(0);
+
+    const session = new LiveSession({
+      onLevel: setLevel,
+      onReading: ({ transcript: text, emotion, timestamp }) => {
+        const elapsed = Math.max(
+          0,
+          Math.round((timestamp * 1000 - startTimeRef.current) / 1000),
+        );
+        const reading = toEmotionData(elapsed, text, emotion);
+        setEmotionData((prev) => [...prev, reading]);
+        setCurrentEmotion(reading);
+        // Whisper returns "" for silence — no point adding an empty line.
+        if (text.trim()) {
+          setTranscript((prev) => [
+            ...prev,
+            { time: elapsed, text, emotion: reading.dominantEmotion },
+          ]);
+        }
+      },
+      onError: (message) => toast.error(message),
+    });
+
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      setIsRecording(true);
-      setIsPaused(false);
-      startTimeRef.current = Date.now();
-      pausedTimeRef.current = 0;
-      setDuration(0);
-      setEmotionData([]);
-      setTranscript([]);
-      setCurrentEmotion(null);
-      toast.success("Analysis started");
-    } catch { toast.error("Could not access microphone"); }
+      await session.start();
+    } catch (err) {
+      session.teardown();
+      setIsConnecting(false);
+      const message = err instanceof Error ? err.message : String(err);
+      // Mic permission failures come back as DOMExceptions from getUserMedia.
+      if (err instanceof DOMException) {
+        toast.error(
+          err.name === "NotAllowedError"
+            ? "Microphone access denied. Allow it in your browser settings and try again."
+            : "Could not access the microphone.",
+        );
+      } else {
+        toast.error(message);
+      }
+      return;
+    }
+
+    sessionRef.current = session;
+    startTimeRef.current = Date.now();
+    pausedTimeRef.current = 0;
+    setIsConnecting(false);
+    setIsRecording(true);
+    setIsPaused(false);
+    toast.success(
+      isMock ? "Analysis started (mock mode — placeholder results)" : "Analysis started",
+    );
   };
 
   const pauseRecording = () => {
+    sessionRef.current?.setMuted(true);
     setIsPaused(true);
+    setLevel(0);
     toast.info("Analysis paused");
   };
 
@@ -112,28 +186,48 @@ export function LiveRecording() {
     const pauseStartTime = Date.now();
     pausedTimeRef.current += pauseStartTime - startTimeRef.current;
     startTimeRef.current = pauseStartTime;
+    sessionRef.current?.setMuted(false);
     setIsPaused(false);
     toast.info("Analysis resumed");
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
+    const session = sessionRef.current;
+    setIsSaving(true);
+    setLevel(0);
+
+    // The server still has to process the final partial chunk, so this can
+    // take a few seconds — hence the saving state on the button.
+    const reportId = (await session?.stop()) ?? null;
+    sessionRef.current = null;
+
+    setIsRecording(false);
+    setIsPaused(false);
+    setIsSaving(false);
+
     if (emotionData.length === 0) {
-      toast.error("No data recorded");
-      setIsRecording(false);
+      toast.error("No speech was analysed — nothing to save");
       return;
     }
-    const summary = calculateSessionSummary(emotionData);
+
+    // Mirror the saved session locally so the dashboard updates instantly.
+    // Using the backend's report id keeps this row from duplicating when the
+    // store is later rehydrated from /api/reports.
     addSession({
-      id: `session-${Date.now()}`,
+      id: reportId ?? `local-${Date.now()}`,
       timestamp: Date.now(),
       duration,
       type: "live",
       emotionData,
-      summary,
+      summary: calculateSessionSummary(emotionData),
     });
-    setIsRecording(false);
-    setIsPaused(false);
-    toast.success("Analysis saved successfully");
+
+    if (reportId) {
+      toast.success("Analysis saved");
+      void refreshSessions();
+    } else {
+      toast.warning("Analysis complete, but it could not be saved to the server");
+    }
     setTimeout(() => navigate("/"), 1500);
   };
 
@@ -154,9 +248,9 @@ export function LiveRecording() {
   };
 
   const isActive = isRecording && !isPaused;
-  const audioResult = currentEmotion ? getDominantWithScore(currentEmotion.audio) : null;
-  const textResult = currentEmotion ? getDominantWithScore(currentEmotion.text) : null;
   const fusedResult = currentEmotion ? getDominantWithScore(currentEmotion.fused) : null;
+  const weights = currentEmotion?.modalityWeights ?? null;
+  const backendReachable = health !== null;
 
   const tooltipStyle = {
     background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
@@ -205,12 +299,25 @@ export function LiveRecording() {
               )}
             </div>
 
-            {/* Signal status */}
+            {/* Signal status — reflects the real backend, via /api/health */}
             <div className="flex flex-wrap gap-4 mt-4">
               {[
                 { label: "Microphone", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
-                { label: "Speech Encoder", status: isActive ? "processing" : "standby", color: isActive ? "var(--primary)" : "var(--muted-foreground)" },
-                { label: "Fusion Model", status: isActive ? "online" : "idle", color: isActive ? "#2e7d52" : "var(--muted-foreground)" },
+                {
+                  label: "Backend",
+                  status: backendReachable ? "connected" : "offline",
+                  color: backendReachable ? "#2e7d52" : "#b8312f",
+                },
+                {
+                  label: "Speech Encoder",
+                  status: !backendReachable ? "offline" : isMock ? "mock" : isActive ? "processing" : "standby",
+                  color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : isActive ? "var(--primary)" : "var(--muted-foreground)",
+                },
+                {
+                  label: "Fusion Model",
+                  status: !backendReachable ? "offline" : isMock ? "mock" : health?.model_loaded ? (isActive ? "online" : "loaded") : "no checkpoint",
+                  color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : health?.model_loaded ? "#2e7d52" : "#b8312f",
+                },
               ].map((s) => (
                   <div key={s.label} className="flex items-center gap-2">
                     <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
@@ -224,6 +331,29 @@ export function LiveRecording() {
               ))}
             </div>
           </div>
+
+          {/* Results shown here are only as real as the backend serving them —
+              say so plainly rather than letting placeholders look like data. */}
+          {!backendReachable && (
+              <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#b8312f", backgroundColor: "var(--card)" }}>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "#b8312f", fontFamily: sans }}>
+                  Backend unreachable
+                </p>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: sans }}>
+                  Start it with <span style={{ fontFamily: mono }}>cd backend &amp;&amp; uvicorn main:app --reload --port 8000</span>, then reload this page.
+                </p>
+              </div>
+          )}
+          {backendReachable && isMock && (
+              <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#c07c20", backgroundColor: "var(--card)" }}>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "#c07c20", fontFamily: sans }}>
+                  Mock mode
+                </p>
+                <p className="text-xs text-muted-foreground" style={{ fontFamily: sans }}>
+                  Transcripts and emotion scores below are randomised placeholders — the trained checkpoint isn't loaded. The full pipeline is running; only the predictions are fake.
+                </p>
+              </div>
+          )}
 
           {/* Main layout */}
           <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-8">
@@ -256,17 +386,23 @@ export function LiveRecording() {
                           </>
                       )}
                       <button
-                          onClick={!isRecording ? startRecording : undefined}
-                          disabled={isRecording}
+                          onClick={!isRecording && !isConnecting ? startRecording : undefined}
+                          disabled={isRecording || isConnecting || !backendReachable}
+                          title={backendReachable ? undefined : "Backend is not running"}
                           className="relative flex items-center justify-center transition-all duration-200"
                           style={{
                             width: 80, height: 80,
                             borderRadius: 0,
                             backgroundColor: !isRecording ? "var(--foreground)" : isActive ? "var(--primary)" : "#c07c20",
-                            cursor: !isRecording ? "pointer" : "default",
+                            cursor: !isRecording && backendReachable && !isConnecting ? "pointer" : "not-allowed",
+                            opacity: backendReachable ? 1 : 0.4,
                           }}
                       >
-                        <Mic style={{ width: 28, height: 28, color: isActive ? "var(--card)" : "var(--background)" }} />
+                        {isConnecting ? (
+                            <span className="size-6 rounded-full border-2 border-background/30 border-t-background animate-spin" />
+                        ) : (
+                            <Mic style={{ width: 28, height: 28, color: isActive ? "var(--card)" : "var(--background)" }} />
+                        )}
                       </button>
                     </div>
 
@@ -294,15 +430,20 @@ export function LiveRecording() {
                           Paused
                         </span>
                         )}
-                        {!isRecording && duration === 0 && (
+                        {isConnecting && (
+                            <span className="text-xs tracking-[0.2em] uppercase font-semibold text-muted-foreground" style={{ fontFamily: sans }}>
+                          Connecting
+                        </span>
+                        )}
+                        {!isRecording && !isConnecting && duration === 0 && (
                             <span className="text-xs text-muted-foreground tracking-wider" style={{ fontFamily: sans }}>
-                          Tap to begin
+                          {backendReachable ? "Tap to begin" : "Backend offline"}
                         </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="w-full"><WaveformBars active={isActive} /></div>
+                    <div className="w-full"><WaveformBars active={isActive} level={level} /></div>
 
                     {isRecording && (
                         <div className="flex gap-2 w-full">
@@ -329,14 +470,24 @@ export function LiveRecording() {
                           )}
                           <Button
                               onClick={stopRecording}
+                              disabled={isSaving}
                               className="flex-1 text-xs font-semibold uppercase tracking-wider py-2"
                               style={{
                                 fontFamily: sans, borderRadius: 0,
                                 backgroundColor: "var(--foreground)", color: "var(--background)",
                               }}
                           >
-                            <Square style={{ width: 14, height: 14, marginRight: 6 }} />
-                            Stop & Save
+                            {isSaving ? (
+                                <>
+                                  <span className="size-3 rounded-full border-2 border-background/30 border-t-background animate-spin mr-1.5" />
+                                  Saving…
+                                </>
+                            ) : (
+                                <>
+                                  <Square style={{ width: 14, height: 14, marginRight: 6 }} />
+                                  Stop & Save
+                                </>
+                            )}
                           </Button>
                         </div>
                     )}
@@ -450,87 +601,85 @@ export function LiveRecording() {
                     className="border p-5"
                     style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
                 >
-                  {/* Column labels */}
-                  <div className="grid grid-cols-3 gap-3 mb-3">
-                    {["Audio Emotion", "Text Emotion", "Fused Output"].map((label, i) => (
-                        <span
-                            key={label}
-                            className="text-xs tracking-[0.14em] uppercase font-semibold"
-                            style={{ fontFamily: sans, color: i === 2 ? "var(--foreground)" : "var(--muted-foreground)" }}
-                        >
-                      {label}
-                    </span>
-                    ))}
-                  </div>
+                  {/*
+                    The model has a single classifier over the fused audio+text
+                    vector, so there is no audio-only or text-only emotion label
+                    to show. What IS per-modality is the trust weighting the
+                    model computes for each utterance (its modality_judge), so
+                    that is what's displayed alongside the one real prediction.
+                  */}
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-5">
 
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* Audio */}
-                    <div
-                        className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[110px]"
-                        style={{ borderColor: "var(--border)", borderStyle: "dashed", backgroundColor: "var(--background)" }}
-                    >
-                      {audioResult ? (
-                          <>
-                            <span className="text-2xl">{getEmoji(audioResult.emotion)}</span>
-                            <span className="text-sm font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[audioResult.emotion] }}>
-                          {audioResult.emotion}
-                        </span>
-                            <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
-                          {(audioResult.confidence * 100).toFixed(0)}% conf.
-                        </span>
-                            <span className="text-xs text-muted-foreground/60 tracking-wider uppercase" style={{ fontFamily: sans }}>
-                          60% weight
-                        </span>
-                          </>
-                      ) : (
-                          <span className="text-sm text-muted-foreground/50 italic" style={{ fontFamily: serif }}>—</span>
-                      )}
+                    {/* Fused prediction — the model's actual output */}
+                    <div>
+                      <span className="text-xs tracking-[0.14em] uppercase font-semibold block mb-3" style={{ fontFamily: sans, color: "var(--foreground)" }}>
+                        Fused Prediction
+                      </span>
+                      <div
+                          className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[130px]"
+                          style={{ borderColor: "var(--foreground)", backgroundColor: "var(--muted)" }}
+                      >
+                        {fusedResult ? (
+                            <>
+                              <span className="text-2xl">{getEmoji(fusedResult.emotion)}</span>
+                              <span className="text-lg font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[fusedResult.emotion] }}>
+                            {fusedResult.emotion}
+                          </span>
+                              <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
+                            {(fusedResult.confidence * 100).toFixed(0)}% confidence
+                          </span>
+                              {currentEmotion?.isMock && (
+                                  <span className="text-xs tracking-wider uppercase font-semibold" style={{ color: "#c07c20", fontFamily: sans }}>
+                              Placeholder
+                            </span>
+                              )}
+                            </>
+                        ) : (
+                            <span className="text-sm text-muted-foreground/50 italic" style={{ fontFamily: serif }}>
+                              Awaiting first chunk…
+                            </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Text */}
-                    <div
-                        className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[110px]"
-                        style={{ borderColor: "var(--border)", borderStyle: "dashed", backgroundColor: "var(--background)" }}
-                    >
-                      {textResult ? (
-                          <>
-                            <span className="text-2xl">{getEmoji(textResult.emotion)}</span>
-                            <span className="text-sm font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[textResult.emotion] }}>
-                          {textResult.emotion}
-                        </span>
-                            <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
-                          {(textResult.confidence * 100).toFixed(0)}% conf.
-                        </span>
-                            <span className="text-xs text-muted-foreground/60 tracking-wider uppercase" style={{ fontFamily: sans }}>
-                          40% weight
-                        </span>
-                          </>
-                      ) : (
-                          <span className="text-sm text-muted-foreground/50 italic" style={{ fontFamily: serif }}>—</span>
-                      )}
-                    </div>
-
-                    {/* Fused */}
-                    <div
-                        className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[110px]"
-                        style={{ borderColor: "var(--foreground)", backgroundColor: "var(--muted)" }}
-                    >
-                      {fusedResult ? (
-                          <>
-                            <span className="text-2xl">{getEmoji(fusedResult.emotion)}</span>
-                            <span className="text-sm font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[fusedResult.emotion] }}>
-                          {fusedResult.emotion}
-                        </span>
-                            <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
-                          {(fusedResult.confidence * 100).toFixed(0)}% conf.
-                        </span>
-                            <span className="text-xs text-muted-foreground/75 tracking-wider uppercase" style={{ fontFamily: sans }}>
-                          Fused · final
-                        </span>
-                          </>
-                      ) : (
-                          <span className="text-sm text-muted-foreground/50 italic" style={{ fontFamily: serif }}>—</span>
-                      )}
+                    {/* Live modality trust weights */}
+                    <div>
+                      <span className="text-xs tracking-[0.14em] uppercase font-semibold block mb-3" style={{ fontFamily: sans, color: "var(--muted-foreground)" }}>
+                        Modality Trust · Learned Per Utterance
+                      </span>
+                      <div
+                          className="border p-4 min-h-[130px] flex flex-col justify-center gap-4"
+                          style={{ borderColor: "var(--border)", borderStyle: "dashed", backgroundColor: "var(--background)" }}
+                      >
+                        {weights ? (
+                            <>
+                              {([
+                                { label: "Audio · voice", value: weights.audio, color: "var(--primary)" },
+                                { label: "Text · words", value: weights.text, color: "#1e5f8a" },
+                              ] as const).map((row) => (
+                                  <div key={row.label} className="flex items-center gap-3">
+                                <span className="text-xs w-24 tracking-wide uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                                  {row.label}
+                                </span>
+                                    <div className="flex-1 h-2" style={{ backgroundColor: "var(--muted)" }}>
+                                      <div
+                                          className="h-full transition-all duration-500"
+                                          style={{ width: `${(row.value * 100).toFixed(1)}%`, backgroundColor: row.color }}
+                                      />
+                                    </div>
+                                    <span className="text-xs tabular-nums w-9 text-right text-muted-foreground" style={{ fontFamily: mono }}>
+                                  {(row.value * 100).toFixed(0)}%
+                                </span>
+                                  </div>
+                              ))}
+                              <p className="text-xs text-muted-foreground/70 leading-snug" style={{ fontFamily: sans }}>
+                                How far the model trusted each signal for this chunk — not a separate prediction per modality.
+                              </p>
+                            </>
+                        ) : (
+                            <span className="text-sm text-muted-foreground/50 italic text-center" style={{ fontFamily: serif }}>—</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

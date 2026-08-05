@@ -1,4 +1,15 @@
-// Mock emotion data generator
+import { useSyncExternalStore } from "react";
+
+// Shared emotion types + the in-memory session store.
+//
+// Real predictions now come from the backend via ../api/ — see
+// api/adapters.ts, which converts backend responses into EmotionData. The
+// generateMock* helpers below are retained only as fixtures for UI work
+// without a running backend; nothing in the live or upload path uses them.
+//
+// NOTE: the model predicts four labels (neutral/happy/sad/angry). `fearful`
+// and `surprised` are placeholders pending the planned UI narrowing — see the
+// header comment in api/adapters.ts for how to remove them.
 export type Emotion = "happy" | "sad" | "angry" | "neutral" | "fearful" | "surprised";
 
 export interface EmotionData {
@@ -9,6 +20,15 @@ export interface EmotionData {
   dominantEmotion: Emotion;
   confidence: number;
   transcript?: string;
+  /**
+   * The model's learned per-utterance trust split between the audio and text
+   * branches (its modality_judge output). This is a weighting, not a
+   * per-modality emotion prediction — `audio` and `text` above both carry the
+   * fused distribution, because a single classifier produces it.
+   */
+  modalityWeights?: { audio: number; text: number };
+  /** True when the backend served a randomised placeholder, not a real result. */
+  isMock?: boolean;
 }
 
 export interface Session {
@@ -16,6 +36,8 @@ export interface Session {
   timestamp: number;
   duration: number;
   type: "live" | "upload";
+  /** Original upload filename, when the session came from a file. */
+  filename?: string;
   emotionData: EmotionData[];
   summary: {
     dominantEmotion: Emotion;
@@ -94,18 +116,63 @@ export function generateMockTranscript(): string {
   return SAMPLE_PHRASES[Math.floor(Math.random() * SAMPLE_PHRASES.length)];
 }
 
-// Store sessions in memory
+// ── Session store ──────────────────────────────────────────────────────────
+// In-memory, and the single read point for Dashboard, Reports, Analytics and
+// Profile. `hydrateSessions()` fills it from GET /api/reports at app start
+// (see contexts/SessionsContext.tsx), so those pages show real persisted data
+// without each having to know about the API.
 let sessions: Session[] = [];
 
+/** Notified whenever the store changes, so views can re-render. */
+const listeners = new Set<() => void>();
+
+function notify() {
+  listeners.forEach((fn) => fn());
+}
+
+export function subscribeToSessions(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
 export function addSession(session: Session) {
-  sessions.unshift(session);
-  if (sessions.length > 50) {
-    sessions = sessions.slice(0, 50);
-  }
+  // A new array rather than an in-place unshift: useSessionStore() below
+  // compares snapshots by reference, so mutating would not re-render.
+  sessions = [session, ...sessions].slice(0, 50);
+  notify();
+}
+
+/**
+ * Replace the store with sessions loaded from the backend. Called once on
+ * sign-in; sessions created during this browser session are merged in front
+ * so a just-finished recording doesn't vanish on refresh-race.
+ */
+export function hydrateSessions(loaded: Session[]) {
+  const loadedIds = new Set(loaded.map((s) => s.id));
+  const localOnly = sessions.filter((s) => !loadedIds.has(s.id));
+  sessions = [...localOnly, ...loaded].slice(0, 50);
+  notify();
+}
+
+export function clearSessions() {
+  sessions = [];
+  notify();
 }
 
 export function getSessions(): Session[] {
   return sessions;
+}
+
+/**
+ * Subscribe a component to the store.
+ *
+ * Pages must use this rather than calling getSessions() during render:
+ * hydrateSessions() fills the store asynchronously from GET /api/reports
+ * after mount, so a bare read captures the empty pre-fetch array and never
+ * updates when the real reports land.
+ */
+export function useSessionStore(): Session[] {
+  return useSyncExternalStore(subscribeToSessions, getSessions);
 }
 
 export function getSessionById(id: string): Session | undefined {
