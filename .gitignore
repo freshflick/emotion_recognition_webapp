@@ -1,2 +1,22 @@
 /.idea/vcs.xml
 /node_modules
+
+# Secrets — never commit. Copy the .example files and fill them in locally.
+.env
+.env.local
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Trained model checkpoints (large binaries — share these out of band)
+backend/checkpoints/
+*.pt
+*.pth
+
+# Build output
+dist/
+frontend/build/

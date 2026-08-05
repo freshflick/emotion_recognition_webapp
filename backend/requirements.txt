@@ -1,0 +1,25 @@
+# Web layer
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20      # required by FastAPI for UploadFile
+python-dotenv==1.0.1
+
+# Auth + persistence
+pyjwt==2.10.1
+supabase==2.11.0
+
+# Speech-to-text
+# Must stay >=20250625: earlier releases import pkg_resources in setup.py,
+# which setuptools 81+ removed, so they fail to build on a fresh install.
+openai-whisper==20250625
+
+# Audio handling
+pydub==0.25.1                 # needs ffmpeg on the host
+torchaudio==2.5.1
+soundfile==0.12.1
+
+# Model runtime
+torch==2.5.1
+transformers==4.47.1
+sentencepiece==0.2.0
+numpy==1.26.4
