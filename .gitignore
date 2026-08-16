@@ -20,3 +20,5 @@ backend/checkpoints/
 # Build output
 dist/
 frontend/build/
+.vercel
+.env*
