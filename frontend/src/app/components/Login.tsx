@@ -14,12 +14,14 @@ const mono = "'IBM Plex Mono', monospace";
 
 export function Login() {
   const navigate = useNavigate();
-  const { signIn, signUp, isDevMode } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const { signIn, signUp, isDevMode, mfaRequired, verifyMfa } = useAuth();
+  const [mfaCode, setMfaCode] = useState("");
+  const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +69,24 @@ export function Login() {
     const { error } = await supabase!.auth.resetPasswordForEmail(email);
     if (error) toast.error(error.message);
     else toast.success("Password reset link sent — check your email.");
+  };
+
+  const handleVerifyMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mfaCode.length !== 6) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setIsVerifyingMfa(true);
+    try {
+      await verifyMfa(mfaCode);
+      toast.success("Welcome back!");
+      navigate("/");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setIsVerifyingMfa(false);
+    }
   };
 
   return (
@@ -154,116 +174,144 @@ export function Login() {
               </p>
             </div>
 
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-xs uppercase tracking-wider font-medium text-muted-foreground" style={{ fontFamily: sans }}>
-                  Email address
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="pl-9 rounded-none border text-xs bg-background h-10"
-                      style={{ borderColor: "var(--border)", fontFamily: mono }}
-                      autoComplete="email"
-                  />
-                </div>
-              </div>
+            {mfaRequired ? (
+                <form onSubmit={handleVerifyMfa} className="space-y-5">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wider font-medium text-muted-foreground" style={{ fontFamily: sans }}>
+                      Authentication Code
+                    </Label>
+                    <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="000000"
+                        value={mfaCode}
+                        onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                        className="text-center text-xl tracking-[0.5em] rounded-none border h-12"
+                        style={{ borderColor: "var(--border)", fontFamily: mono }}
+                        autoFocus
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter the 6-digit code from your authenticator app.
+                    </p>
+                  </div>
+                  <Button type="submit" className="w-full rounded-none h-10 text-xs tracking-[0.14em] uppercase" disabled={isVerifyingMfa}>
+                    {isVerifyingMfa ? "Verifying…" : "Verify"}
+                  </Button>
+                </form>
+            ) : (
+                <>
+                  {/* Login Form */}
+                  <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email" className="text-xs uppercase tracking-wider font-medium text-muted-foreground" style={{ fontFamily: sans }}>
+                        Email address
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            id="email"
+                            type="email"
+                            placeholder="you@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="pl-9 rounded-none border text-xs bg-background h-10"
+                            style={{ borderColor: "var(--border)", fontFamily: mono }}
+                            autoComplete="email"
+                        />
+                      </div>
+                    </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-xs uppercase tracking-wider font-medium text-muted-foreground" style={{ fontFamily: sans }}>
-                    Password
-                  </Label>
-                  <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
-                      onClick={handleForgotPassword}
-                      style={{ fontFamily: sans }}
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="pl-9 pr-9 rounded-none border text-xs bg-background h-10"
-                      style={{ borderColor: "var(--border)", fontFamily: mono }}
-                      autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                  />
-                  <button
-                      type="button"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => setShowPassword((v) => !v)}
-                      tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
-              </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="password" className="text-xs uppercase tracking-wider font-medium text-muted-foreground" style={{ fontFamily: sans }}>
+                          Password
+                        </Label>
+                        <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+                            onClick={handleForgotPassword}
+                            style={{ fontFamily: sans }}
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="pl-9 pr-9 rounded-none border text-xs bg-background h-10"
+                            style={{ borderColor: "var(--border)", fontFamily: mono }}
+                            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                        />
+                        <button
+                            type="button"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setShowPassword((v) => !v)}
+                            tabIndex={-1}
+                        >
+                          {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        </button>
+                      </div>
+                    </div>
 
-              <Button
-                  type="submit"
-                  className="w-full rounded-none h-10 text-xs tracking-[0.14em] uppercase font-normal gap-2"
-                  style={{
-                    fontFamily: sans,
-                    backgroundColor: "var(--foreground)",
-                    color: "var(--background)",
-                  }}
-                  disabled={isLoading}
-              >
-                {isLoading ? (
-                    <span className="flex items-center gap-2">
-                  <span className="size-3.5 rounded-full border-2 border-background/30 border-t-background animate-spin" />
-                  {mode === "signup" ? "Creating account…" : "Authenticating…"}
-                </span>
-                ) : (
-                    <>
-                      {mode === "signup" ? "Create account" : "Sign in"}{" "}
-                      <ArrowRight className="size-3.5" />
-                    </>
-                )}
-              </Button>
-            </form>
+                    <Button
+                        type="submit"
+                        className="w-full rounded-none h-10 text-xs tracking-[0.14em] uppercase font-normal gap-2"
+                        style={{
+                          fontFamily: sans,
+                          backgroundColor: "var(--foreground)",
+                          color: "var(--background)",
+                        }}
+                        disabled={isLoading}
+                    >
+                      {isLoading ? (
+                          <span className="flex items-center gap-2">
+            <span className="size-3.5 rounded-full border-2 border-background/30 border-t-background animate-spin" />
+                            {mode === "signup" ? "Creating account…" : "Authenticating…"}
+          </span>
+                      ) : (
+                          <>
+                            {mode === "signup" ? "Create account" : "Sign in"}{" "}
+                            <ArrowRight className="size-3.5" />
+                          </>
+                      )}
+                    </Button>
+                  </form>
 
-            {/* Dev-mode notice — only when Supabase isn't configured, so it
-                disappears by itself once real credentials are in .env */}
-            {isDevMode && (
-                <div className="mt-8 p-4 border bg-card" style={{ borderColor: "var(--border)" }}>
-                  <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground font-medium mb-2" style={{ fontFamily: sans }}>
-                    Local Development Mode
+                  {/* Dev-mode notice — only when Supabase isn't configured */}
+                  {isDevMode && (
+                      <div className="mt-8 p-4 border bg-card" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground font-medium mb-2" style={{ fontFamily: sans }}>
+                          Local Development Mode
+                        </p>
+                        <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: sans }}>
+                          No Supabase credentials found, so any email and password will
+                          sign you in and sessions won't be saved between reloads.
+                          Add <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_URL</span> and{" "}
+                          <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_ANON_KEY</span> to{" "}
+                          <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>.env</span> to enable real accounts.
+                        </p>
+                      </div>
+                  )}
+
+                  {/* Sign in / Sign up toggle */}
+                  <p className="text-center text-xs text-muted-foreground mt-6 font-normal" style={{ fontFamily: sans }}>
+                    {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+                    <button
+                        type="button"
+                        onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                        className="text-foreground font-semibold hover:underline"
+                    >
+                      {mode === "signin" ? "Create one" : "Sign in"}
+                    </button>
                   </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed" style={{ fontFamily: sans }}>
-                    No Supabase credentials found, so any email and password will
-                    sign you in and sessions won't be saved between reloads.
-                    Add <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_URL</span> and{" "}
-                    <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_ANON_KEY</span> to{" "}
-                    <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>.env</span> to enable real accounts.
-                  </p>
-                </div>
+                </>
             )}
-
-            {/* Sign in / Sign up toggle */}
-            <p className="text-center text-xs text-muted-foreground mt-6 font-normal" style={{ fontFamily: sans }}>
-              {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-              <button
-                  type="button"
-                  onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-                  className="text-foreground font-semibold hover:underline"
-              >
-                {mode === "signin" ? "Create one" : "Sign in"}
-              </button>
-            </p>
           </div>
 
           {/* Footer info for right panel */}

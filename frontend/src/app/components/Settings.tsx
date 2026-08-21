@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Check, Sun, Moon, Monitor, ShieldCheck, ShieldOff } from "lucide-react";
 import { useAccent, type AccentColor } from "../contexts/AccentContext";
@@ -16,15 +16,11 @@ import {
 } from "./ui/dialog";
 import { useUser } from "../contexts/UserContext";
 import { toast } from "sonner";
+import {supabase} from "../lib/supabase.ts";
 
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
 const mono = "'IBM Plex Mono', monospace";
-
-const TOTP_SECRET = "JBSWY3DPEHPK3PXP";
-const TOTP_ISSUER = "EmotionMonitor";
-const TOTP_URI = `otpauth://totp/${TOTP_ISSUER}:user%40example.com?secret=${TOTP_SECRET}&issuer=${TOTP_ISSUER}`;
-const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(TOTP_URI)}`;
 
 export function Settings() {
   const { user } = useUser();
@@ -36,8 +32,26 @@ export function Settings() {
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [verifyCode, setVerifyCode] = useState("");
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [qrCodeSvg, setQrCodeSvg] = useState<string>("");
+  const [manualSecret, setManualSecret] = useState<string>("");
 
-  const handleChangePassword = () => {
+    useEffect(() => {
+        if (!supabase) return;
+        supabase.auth.mfa.listFactors().then(({ data, error }) => {
+            if (error) return;
+          setTwoFAEnabled(
+              (data?.totp?.some((factor) => factor.status === "verified") ?? false)
+          );
+        });
+    }, []);
+
+  const handleChangePassword = async () => {
+    if (!supabase) {
+      toast.error("Supabase client not initialized");
+      return;
+    }
+
     if (!currentPassword || !newPassword || !confirmPassword) {
       toast.error("Please fill in all password fields");
       return;
@@ -53,11 +67,124 @@ export function Settings() {
       return;
     }
 
-    toast.success("Password changed successfully");
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser?.email) {
+      toast.error("Could not verify your account email");
+      return;
+    }
+
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: authUser.email,   // ← real Supabase Auth email, not the local profile
+      password: currentPassword,
+    });
+
+    if (reauthError) {
+      toast.error("Current password is incorrect" + currentPassword);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Password changed successfully");
+      }
+    } catch (error) {
+      toast.error("An unexpected error occurred");
+      console.error(error);
+    }
+
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
+
   };
+
+  const handleCloseQRDialog = async () => {
+    if (!supabase) {
+      setShowQRDialog(false);
+      return;
+    }
+
+    // If enrollment was started but not verified, remove the pending factor.
+    if (factorId && !twoFAEnabled) {
+      const { error } = await supabase.auth.mfa.unenroll({
+        factorId,
+      });
+
+      if (error) {
+        console.error("Failed to cancel 2FA enrollment:", error);
+      }
+    }
+
+    setFactorId(null);
+    setQrCodeSvg("");
+    setManualSecret("");
+    setVerifyCode("");
+    setShowQRDialog(false);
+  };
+
+    const handleStartEnrollment = async () => {
+        if (!supabase) return;
+        const { data, error } = await supabase.auth.mfa.enroll({
+          factorType: "totp",
+          friendlyName: "Authenticator App",
+        });
+        if (error) {
+              toast.error(error.message);
+              return;
+          }
+          setFactorId(data.id);
+          setQrCodeSvg(data.totp.qr_code);
+          setManualSecret(data.totp.secret);
+          setVerifyCode("");
+          setShowQRDialog(true);
+    };
+
+    const handleVerifyEnrollment = async () => {
+        if (!supabase || !factorId) return;
+
+        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+            factorId,
+        });
+        if (challengeError) {
+            toast.error(challengeError.message);
+            return;
+        }
+
+        const { error: verifyError } = await supabase.auth.mfa.verify({
+            factorId,
+            challengeId: challenge.id,
+            code: verifyCode,
+        });
+        if (verifyError) {
+            toast.error("Invalid code — try again");
+            return;
+        }
+
+        setTwoFAEnabled(true);
+        setShowQRDialog(false);
+        toast.success("Two-factor authentication enabled");
+    };
+
+    const handleDisable2FA = async () => {
+        if (!supabase) return;
+        const { data } = await supabase.auth.mfa.listFactors();
+        const factor = data?.totp?.[0];
+        if (!factor) return;
+
+        const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+        if (error) {
+            toast.error(error.message);
+            return;
+        }
+        setTwoFAEnabled(false);
+        toast.success("Two-factor authentication disabled");
+    };
 
   const cardStyle = {
     borderColor: "var(--border)",
@@ -257,10 +384,7 @@ export function Settings() {
                             size="sm"
                             className="rounded-none text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive font-normal uppercase tracking-wider"
                             style={{ fontFamily: sans }}
-                            onClick={() => {
-                              setTwoFAEnabled(false);
-                              toast.success("Two-factor authentication disabled");
-                            }}
+                            onClick={() => { void handleDisable2FA() }}
                         >
                           <ShieldOff className="size-3.5 mr-1.5" />
                           Disable
@@ -271,7 +395,7 @@ export function Settings() {
                             size="sm"
                             className="rounded-none text-xs font-normal uppercase tracking-wider"
                             style={{ fontFamily: sans, borderColor: "var(--border)" }}
-                            onClick={() => { setVerifyCode(""); setShowQRDialog(true); }}
+                            onClick={() => { void handleStartEnrollment(); }}
                         >
                           <ShieldCheck className="size-3.5 mr-1.5" />
                           Set Up 2FA
@@ -282,7 +406,16 @@ export function Settings() {
               </Card>
 
               {/* 2FA QR Dialog */}
-              <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
+              <Dialog
+                  open={showQRDialog}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      void handleCloseQRDialog();
+                    } else {
+                      setShowQRDialog(true);
+                    }
+                  }}
+              >
                 <DialogContent className="max-w-2xl rounded-none border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                   <DialogHeader>
                     <DialogTitle className="text-lg font-bold" style={{ fontFamily: serif }}>
@@ -296,21 +429,24 @@ export function Settings() {
                   <div className="flex gap-6 py-2">
                     {/* Left: QR code */}
                     <div className="flex-shrink-0 flex flex-col items-center gap-3">
-                      <div className="p-3 border bg-white" style={{ borderColor: "var(--border)" }}>
-                        <img
-                            src={QR_URL}
-                            alt="TOTP QR code"
-                            width={180}
-                            height={180}
-                            className="block"
-                        />
+                      <div
+                          className="p-3 border bg-white"
+                          style={{ borderColor: "var(--border)" }}
+                      >
+                        <div className="w-[180px] h-[180px]">
+                          <img
+                              src={qrCodeSvg}
+                              alt="QR code"
+                              className="w-full h-full"
+                          />
+                        </div>
                       </div>
                       <div className="bg-muted p-2 text-center w-full border" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1 font-normal" style={{ fontFamily: sans }}>
                           Manual key
                         </p>
                         <code className="text-xs font-mono tracking-widest text-foreground select-all" style={{ fontFamily: mono }}>
-                          {TOTP_SECRET}
+                            {manualSecret}
                         </code>
                       </div>
                     </div>
@@ -343,11 +479,7 @@ export function Settings() {
                             className="w-full rounded-none text-xs font-normal uppercase tracking-wider"
                             style={{ fontFamily: sans }}
                             disabled={verifyCode.length !== 6}
-                            onClick={() => {
-                              setTwoFAEnabled(true);
-                              setShowQRDialog(false);
-                              toast.success("Two-factor authentication enabled");
-                            }}
+                            onClick={() => { void handleVerifyEnrollment() }}
                         >
                           <ShieldCheck className="size-4 mr-2" />
                           Verify &amp; Enable

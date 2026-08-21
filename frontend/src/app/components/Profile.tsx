@@ -9,11 +9,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { useUser } from "../contexts/UserContext";
 import { toast } from "sonner";
 import { useSessionStore } from "../utils/emotionEngine";
+import { supabase } from "../lib/supabase";
 
 export function Profile() {
   const { user, updateUserProfile } = useUser();
   const [isEditing, setIsEditing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: user.name,
     email: user.email,
@@ -25,6 +25,52 @@ export function Profile() {
   const totalSessions = sessions.length;
   const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
   const memberSince = new Date(user.createdAt).toLocaleDateString();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !supabase) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Not signed in");
+
+      const ext = file.name.split(".").pop();
+      const path = `${authUser.id}/avatar.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+          .from("avatars")
+          .upload(path, file, { upsert: true }); // upsert so re-uploading replaces the old one
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+
+      const bustedUrl = `${publicUrl}?t=${Date.now()}`;
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { avatar_url: bustedUrl },
+      });
+      if (updateError) throw updateError;
+
+      setFormData((prev) => ({ ...prev, avatar: bustedUrl }));
+      updateUserProfile({ avatar: bustedUrl });
+      toast.success("Profile picture updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   const handleSave = () => {
     if (!formData.name.trim()) {
@@ -132,25 +178,18 @@ export function Profile() {
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          setFormData({ ...formData, avatar: ev.target?.result as string });
-                        };
-                        reader.readAsDataURL(file);
-                      }}
+                      onChange={ handleAvatarUpload }
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="text-xs"
+                      disabled={isUploadingAvatar}
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Upload className="size-3.5 mr-1.5" />
-                      Choose Photo
+                      {isUploadingAvatar ? "Uploading…" : "Choose Photo"}
                     </Button>
                   </>
                 )}

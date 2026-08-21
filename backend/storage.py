@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from supabase import Client, create_client
 
-from config import SUPABASE_ENABLED, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL
+from config import SUPABASE_ENABLED, SUPABASE_SECRET_KEY, SUPABASE_URL
 
 _client: Client | None = None
 
@@ -25,7 +25,7 @@ def is_enabled() -> bool:
 def get_client() -> Client:
     global _client
     if _client is None:
-        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        _client = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
     return _client
 
 
