@@ -85,6 +85,8 @@ async def health():
         "auth_disabled": DISABLE_AUTH,
         "persistence_enabled": storage.is_enabled(),
         "labels": emotion_model.LABEL_NAMES,
+        "audio_model": emotion_model.AUDIO_MODEL_NAME,
+        "text_model": emotion_model.TEXT_MODEL_NAME,
     }
 
 

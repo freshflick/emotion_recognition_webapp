@@ -3,24 +3,13 @@
  *  THE LABEL SEAM — read this before changing the emotion set.
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * The model predicts FOUR labels: Neutral, Happy, Sad, Angry.
- * The UI is currently built around SIX: those four plus fearful and surprised.
+ * The model predicts FIVE labels: Neutral, Happy, Sad, Angry, Frustrated.
+ * The UI is built around SIX: those four plus fearful and surprised.
  *
- * Rather than spread that mismatch across the six components that render
+ * Frustrated is mapped to "angry" in the UI since it's the closest match.
+ * Rather than spread the mismatch across the six components that render
  * emotions, it is contained here. Every backend response passes through
  * `toEmotionData()`, which fills the two unsupported keys with 0.
- *
- * ── When the UI is narrowed to the real four ──
- * 1. Change `Emotion` in ../utils/emotionEngine.ts to the four labels.
- * 2. Delete UNSUPPORTED_EMOTIONS below and the loop that zero-fills them.
- * 3. Fix the resulting type errors in the components (they'll be mechanical:
- *    EMOTION_COLORS maps and chart <Line> lists).
- * No other file needs to know the label set changed.
- *
- * ── Until then ──
- * `fearful` and `surprised` are always 0, so they render as flat lines at the
- * bottom of the timeline charts. That is accurate — the model genuinely
- * cannot predict them — but call it out in a demo so it doesn't read as a bug.
  */
 import type { Emotion, EmotionData } from "../utils/emotionEngine";
 import type { AnalysisSegment, BackendLabel, EmotionResult, LiveReading } from "./types";
@@ -31,6 +20,7 @@ const LABEL_TO_EMOTION: Record<BackendLabel, Emotion> = {
   Happy: "happy",
   Sad: "sad",
   Angry: "angry",
+  Frustrated: "angry",
 };
 
 /** Frontend keys the model has no output for. Delete when the UI moves to 4. */

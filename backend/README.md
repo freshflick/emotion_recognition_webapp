@@ -20,16 +20,17 @@ else) can call it.
 ## Which of your files this backend actually uses
 
 Copied straight from your `model.py` into `models/emotion_model.py`:
-`FusionEmotionModel` (WavLM-large + emoberta-base + RMS/intensity gated fusion).
+`FusionEmotionModel` (Emotion2Vec Large via FunASR + EmoBERTa-large + RMS/intensity gated fusion).
 **If your team changes `model.py`'s architecture, update `models/emotion_model.py`
 to match** — the state_dict loaded from your checkpoint has to line up
 exactly with the class shape or `load_state_dict` will throw a size-mismatch
 error at startup.
 
-Your other files (`preprocess.py`, `split_data.py`, `train.py`, `dataset.py`,
-`test.py`, `evaluate.py`) all belong to the **training repo**, not this backend
-— keep them where they are. The only thing that crosses over is the one
-checkpoint file `train.py` produces: `outputs/models/fusion_model.pt`.
+Your other files (`prepare_combined_dataset.py`, `dataset.py`,
+`finetune_iemocap.py`, `eval_opt.py`, `evaluate.py`) all belong to the
+**training repo**, not this backend — keep them where they are. The only thing
+that crosses over is the one checkpoint file `finetune_iemocap.py` produces:
+`outputs/models/iemocap_e2v_large_model.pt`.
 
 `model_backup.py`, `old_preprocess.py`, and `trainv1.py` are earlier
 iterations your team has since moved past — I'd move them into an
@@ -73,7 +74,9 @@ torchaudio            # audio loading/resampling to match dataset.py
 soundfile             # audio I/O backend used by torchaudio/pydub
 
 torch                 # model runtime
-transformers          # AutoModel/AutoTokenizer/AutoFeatureExtractor (WavLM, emoberta)
+transformers          # AutoModel/AutoTokenizer (EmoBERTa-large)
+funasr                # Emotion2Vec Large audio encoder
+librosa               # audio feature extraction
 sentencepiece         # tokenizer backend some HF models need
 numpy                 # array handling
 ```
@@ -82,7 +85,7 @@ Copy your trained checkpoint into this project:
 
 ```bash
 mkdir -p checkpoints
-cp /path/to/outputs/models/fusion_model.pt checkpoints/fusion_model.pt
+cp /path/to/outputs/models/iemocap_e2v_large_model.pt checkpoints/fusion_model.pt
 ```
 
 ## Step 1 — verify the model works, with zero API/frontend involved
@@ -119,7 +122,7 @@ the UI uses it to drive its status indicators.
 ```json
 {"status": "ok", "model_loaded": true, "mock_mode": false,
  "auth_disabled": false, "persistence_enabled": true,
- "labels": ["Neutral", "Happy", "Sad", "Angry"]}
+ "labels": ["Neutral", "Happy", "Sad", "Angry", "Frustrated"]}
 ```
 
 **`POST /api/analyze-file`** — upload one audio file, get a timeline back.
@@ -138,7 +141,7 @@ would be truncated to its first 8 seconds and reported as the whole file.
       "start": 0.0, "end": 8.0,
       "transcript": "I can't believe you did that",
       "emotion": {
-        "probs": {"Neutral": 0.05, "Happy": 0.02, "Sad": 0.10, "Angry": 0.83},
+        "probs": {"Neutral": 0.05, "Happy": 0.02, "Sad": 0.10, "Angry": 0.73, "Frustrated": 0.10},
         "top_label": "Angry",
         "confidence": 0.83,
         "modality_weights": {"audio": 0.71, "text": 0.29}
@@ -188,5 +191,5 @@ Once you've picked a GPU host:
 - Set `DEVICE=cuda` in `.env`
 - Same code runs unchanged — `torch.load(..., map_location=device)` and
   `.to(device)` calls already handle CPU/GPU transparently
-- WavLM-large is a big model; make sure whatever GPU box you pick has enough
-  VRAM headroom for it plus Whisper loaded simultaneously
+- Emotion2Vec Large + EmoBERTa-large are big models; make sure whatever GPU box
+  you pick has enough VRAM headroom for both plus Whisper loaded simultaneously

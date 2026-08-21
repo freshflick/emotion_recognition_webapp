@@ -1,64 +1,66 @@
 """
 emotion_model.py
 ────────────────
-This is YOUR model — the FusionEmotionModel architecture copied verbatim
-from your team's model.py, plus two functions the backend actually calls:
+Emotion2Vec Large (via FunASR) + EmoBERTa-large fusion model with
+Attention-Gating, adapted from the team's training code.
+
+Two functions the backend actually calls:
 
     load_model(checkpoint_path)   — call once at startup
     predict(waveform, text)       — call per audio chunk / uploaded file
 
-IMPORTANT: this architecture must always match whatever model.py your
-team is training with. If someone changes model.py during training
-experiments (e.g. adds a feature, changes a layer), this file needs the
-same edit or `model.load_state_dict()` will fail with a shape mismatch.
-The safest long-term fix is to turn your training repo into an installable
-package and import FusionEmotionModel from it directly instead of
-duplicating the class here — worth doing once your architecture stabilizes.
+IMPORTANT: this architecture must match the team's model.py exactly.
 """
 from typing import List
+import numpy as np
 import torch
 import torch.nn as nn
-from transformers import AutoModel, AutoTokenizer, AutoFeatureExtractor
+from transformers import AutoModel, AutoTokenizer
 
 # ── must match model.py exactly ─────────────────────────────────────────────
-AUDIO_MODEL_NAMES: List[str] = ["microsoft/wavlm-large"]
-TEXT_MODEL_NAME: str = "tae898/emoberta-base"
-NUM_LABELS: int = 4
+AUDIO_MODEL_NAME: str = "iic/emotion2vec_plus_large"
+TEXT_MODEL_NAME: str = "tae898/emoberta-large"
+NUM_LABELS: int = 5
 
-# Matches preprocess.py's LABEL_MAP order: neu=0, hap=1(+exc), sad=2, ang=3
-LABEL_NAMES = ["Neutral", "Happy", "Sad", "Angry"]
+# Matches preprocess.py's LABEL_MAP order: neu=0, hap=1, sad=2, ang=3, fru=4
+LABEL_NAMES = ["Neutral", "Happy", "Sad", "Angry", "Frustrated"]
 
 # Matches dataset.py's fixed audio length (8 seconds @ 16kHz)
 TARGET_SR = 16_000
 MAX_AUDIO_SECS = 8
 MAX_AUDIO_SAMPLES = TARGET_SR * MAX_AUDIO_SECS
-MAX_TEXT_LEN = 128
+MIN_AUDIO_SAMPLES = 8000
+MAX_TEXT_LEN = 192
 
 
 class FusionEmotionModel(nn.Module):
-    """Copied from model.py — do not edit independently of that file."""
+    """Copied from model.py — do not edit independently of that file.
+    Late-fusion emotion classifier (Emotion2Vec Large via FunASR + EmoBERTa)
+    with Attention-Gating."""
 
-    def __init__(
-        self,
-        audio_model_names: List[str] = AUDIO_MODEL_NAMES,
-        text_model_name: str = TEXT_MODEL_NAME,
-        num_labels: int = NUM_LABELS,
-        dropout: float = 0.3,
-    ):
+    def __init__(self, num_classes: int = NUM_LABELS, dropout: float = 0.3):
         super().__init__()
-        self.audio_model_names = audio_model_names
-        self.text_model_name = text_model_name
-        self.num_labels = num_labels
+        self.num_classes = num_classes
 
-        self.audio_encoders = nn.ModuleList(
-            [AutoModel.from_pretrained(name) for name in audio_model_names]
+        print("Loading emotion2vec_plus_large via FunASR...")
+        import os
+        from funasr import AutoModel as FunASRAutoModel
+        _emotion2vec_cache = os.path.expanduser(
+            "~/.cache/modelscope/hub/iic/emotion2vec_plus_large"
         )
-        self.text_encoder = AutoModel.from_pretrained(text_model_name)
+        funasr_pipeline = FunASRAutoModel(
+            model=_emotion2vec_cache, disable_update=True, device="cpu"
+        )
+        self.audio_encoders = nn.ModuleList([funasr_pipeline.model])
 
-        self.audio_dims = [enc.config.hidden_size for enc in self.audio_encoders]
-        self.text_dim = self.text_encoder.config.hidden_size
+        print("Loading EmoBERTa-large...")
+        self.text_encoder = AutoModel.from_pretrained(TEXT_MODEL_NAME)
+        if hasattr(self.text_encoder, "gradient_checkpointing_enable"):
+            self.text_encoder.gradient_checkpointing_enable()
 
-        fused_dim = (sum(self.audio_dims) * 2) + self.text_dim + 2
+        audio_dim = 1024
+        text_dim = 1024
+        fused_dim = (audio_dim * 2) + text_dim + 2
 
         self.modality_judge = nn.Sequential(
             nn.Linear(fused_dim, 2),
@@ -71,8 +73,17 @@ class FusionEmotionModel(nn.Module):
             nn.Linear(fused_dim, 512),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(512, num_labels),
+            nn.Linear(512, num_classes),
         )
+
+        self._freeze_all()
+
+    def _freeze_all(self):
+        for enc in self.audio_encoders:
+            for p in enc.parameters():
+                p.requires_grad = False
+        for p in self.text_encoder.parameters():
+            p.requires_grad = False
 
     def forward(
         self,
@@ -83,18 +94,29 @@ class FusionEmotionModel(nn.Module):
         intensities,
         return_trust: bool = False,
     ):
-        # `return_trust` is inference-only sugar — it adds no parameters, so
-        # checkpoints stay loadable and training behaviour is unchanged. It
-        # surfaces the modality_judge scores the API reports to the UI.
         audio_feats = []
         for enc in self.audio_encoders:
-            out = enc(audio_values, output_hidden_states=True)
-            all_layers = out.hidden_states
-            multi_scale_feat = torch.stack(all_layers[-4:]).mean(dim=0)
-            feat_mean = multi_scale_feat.mean(dim=1)
-            feat_max = multi_scale_feat.max(dim=1).values
-            audio_feats.append(feat_mean)
-            audio_feats.append(feat_max)
+            out = enc.extract_features(audio_values, padding_mask=None)
+
+            if isinstance(out, tuple):
+                feats = out[0]
+            elif isinstance(out, dict):
+                if "x" in out:
+                    feats = out["x"]
+                elif "last_hidden_state" in out:
+                    feats = out["last_hidden_state"]
+                elif "feats" in out:
+                    feats = out["feats"]
+                else:
+                    feats = list(out.values())[0]
+            elif torch.is_tensor(out):
+                feats = out
+            else:
+                feats = out
+
+            feat_mean = feats.mean(dim=1)
+            feat_max = feats.max(dim=1).values
+            audio_feats.extend([feat_mean, feat_max])
 
         text_out = self.text_encoder(
             input_ids=input_ids, attention_mask=attention_mask
@@ -121,30 +143,36 @@ class FusionEmotionModel(nn.Module):
 
 # ── inference-time state ────────────────────────────────────────────────────
 _model: FusionEmotionModel | None = None
-_audio_processor = None
+_audio_proc = None
 _text_tokenizer = None
+_biases: torch.Tensor | None = None
 _device = "cpu"
 _mock_mode = False
 
 
 def load_model(checkpoint_path: str, device: str = "cpu"):
     """
-    Loads your trained checkpoint (the .pt file train.py saves to
-    outputs/models/fusion_model.pt). Call once at app startup.
-
-    train.py may have saved either a bare state_dict or a wrapper dict with
-    the weights under "model_state_dict"/"state_dict" — both are accepted, so
-    you don't have to re-export the checkpoint to match one convention.
+    Loads your trained checkpoint (the .pt file finetune_iemocap.py saves).
+    Call once at app startup.
     """
-    global _model, _audio_processor, _text_tokenizer, _device, _mock_mode
+    global _model, _audio_proc, _text_tokenizer, _biases, _device, _mock_mode
     _device = device
     _mock_mode = False
 
-    _audio_processor = AutoFeatureExtractor.from_pretrained(AUDIO_MODEL_NAMES[0])
+    # Custom audio processor: just pad-sequences waveforms into a batched tensor
+    def audio_processor(waveforms, **kwargs):
+        if isinstance(waveforms, list):
+            tensors = [torch.as_tensor(w, dtype=torch.float32) for w in waveforms]
+            audio_tensor = torch.nn.utils.rnn.pad_sequence(tensors, batch_first=True)
+        else:
+            audio_tensor = torch.as_tensor(waveforms, dtype=torch.float32)
+        return {"input_values": audio_tensor}
+
+    _audio_proc = audio_processor
     _text_tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
 
-    _model = FusionEmotionModel()
-    state = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    _model = FusionEmotionModel(num_classes=NUM_LABELS)
+    state = torch.load(checkpoint_path, map_location=device, weights_only=True)
 
     if isinstance(state, dict):
         for key in ("model_state_dict", "state_dict"):
@@ -152,23 +180,25 @@ def load_model(checkpoint_path: str, device: str = "cpu"):
                 state = state[key]
                 break
     elif isinstance(state, nn.Module):
-        # Checkpoint was saved with torch.save(model) rather than the
-        # state_dict — pull the weights back out.
         state = state.state_dict()
 
     _model.load_state_dict(state)
     _model.to(device)
     _model.eval()
 
+    # Default inference biases (zeros); overwritten by eval_opt.py offsets
+    # if present in the checkpoint
+    _biases = torch.zeros(NUM_LABELS, device=_device, dtype=torch.float32)
+    if isinstance(state, dict) and "inference_biases" in state:
+        _biases = torch.tensor(
+            state["inference_biases"], device=_device, dtype=torch.float32
+        )
+
 
 def enable_mock_mode():
     """
     Serve randomised predictions in the real response shape.
-
-    Used when no trained checkpoint is available yet, so the frontend, the
-    WebSocket protocol and persistence can all be built and demoed end-to-end
-    before training finishes. Responses carry "mock": true so the UI can badge
-    them and nobody mistakes them for real results.
+    Used when no trained checkpoint is available yet.
     """
     global _mock_mode
     _mock_mode = True
@@ -203,9 +233,7 @@ def _mock_predict() -> dict:
 def predict(waveform, text: str) -> dict:
     """
     waveform: 1D torch.Tensor or numpy array, 16kHz mono, already
-              pad/truncated to MAX_AUDIO_SAMPLES (see audio_utils.py —
-              use the same fixed-length logic as dataset.py's _load_audio
-              so inference matches the distribution the model was trained on)
+              pad/truncated to MAX_AUDIO_SAMPLES (see audio_utils.py)
     text:     transcript string (from Whisper)
 
     Returns:
@@ -215,13 +243,6 @@ def predict(waveform, text: str) -> dict:
         "confidence": float,
         "modality_weights": {"audio": float, "text": float},
       }
-
-    `modality_weights` is the modality_judge softmax — the model's learned,
-    per-utterance answer to "how far do I trust the voice vs the words here?".
-    The UI shows these instead of a hardcoded audio/text split. Note this is a
-    trust weighting, NOT a per-modality emotion prediction: the architecture
-    has a single classifier over the fused vector, so an audio-only or
-    text-only emotion label is not something this model can produce.
     """
     if _mock_mode:
         return _mock_predict()
@@ -233,19 +254,29 @@ def predict(waveform, text: str) -> dict:
         waveform = torch.tensor(waveform, dtype=torch.float32)
     waveform = waveform.to(torch.float32)
 
-    # Same acoustic features as dataset.py's __getitem__
+    # Pad to minimum length if needed
+    if waveform.shape[0] < MIN_AUDIO_SAMPLES:
+        waveform = torch.nn.functional.pad(
+            waveform, (0, MIN_AUDIO_SAMPLES - waveform.shape[0])
+        )
+
+    # Acoustic features (same as dataset.py)
     rms_energy = torch.sqrt(torch.mean(waveform ** 2)).view(1, 1)
     intensity = torch.max(torch.abs(waveform)).view(1, 1)
 
-    audio_inputs = _audio_processor(
-        [waveform.numpy()], sampling_rate=TARGET_SR, return_tensors="pt", padding=True
+    # Audio inputs via the custom pad-sequence processor
+    audio_inputs = _audio_proc(
+        [waveform.numpy()], sampling_rate=TARGET_SR, return_tensors="pt",
+        padding=True, truncation=True, max_length=MAX_AUDIO_SAMPLES
     )
     audio_values = audio_inputs["input_values"]
     if audio_values.ndim == 3 and audio_values.shape[1] == 1:
         audio_values = audio_values.squeeze(1)
 
+    # Text inputs via emoberta-large tokenizer
     text_inputs = _text_tokenizer(
-        [text or ""], padding=True, truncation=True, max_length=MAX_TEXT_LEN, return_tensors="pt"
+        [text or ""], padding=True, truncation=True,
+        max_length=MAX_TEXT_LEN, return_tensors="pt"
     )
 
     audio_values = audio_values.to(_device)
@@ -263,6 +294,11 @@ def predict(waveform, text: str) -> dict:
             intensity,
             return_trust=True,
         )
+
+        # Apply inference biases if present
+        if _biases is not None:
+            logits = logits + _biases
+
         probs = torch.softmax(logits, dim=-1).squeeze().cpu().numpy()
         trust = trust_scores.squeeze().cpu().numpy()
 

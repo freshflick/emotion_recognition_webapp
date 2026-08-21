@@ -36,9 +36,18 @@ registerProcessor('pcm-tap', PcmTap);
 `;
 
 function floatToPcm16(input: Float32Array): ArrayBuffer {
+  // Auto-gain: boost quiet audio so the model gets consistent levels.
+  let peak = 0;
+  for (let i = 0; i < input.length; i++) {
+    const v = Math.abs(input[i]);
+    if (v > peak) peak = v;
+  }
+  const TARGET_PEAK = 0.3;
+  const gain = peak > 0.01 ? Math.min(TARGET_PEAK / peak, 8) : 1;
+
   const out = new Int16Array(input.length);
   for (let i = 0; i < input.length; i++) {
-    const s = Math.max(-1, Math.min(1, input[i]));
+    const s = Math.max(-1, Math.min(1, input[i] * gain));
     out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
   return out.buffer;

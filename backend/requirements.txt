@@ -24,3 +24,6 @@ torch==2.5.1
 transformers==4.47.1
 sentencepiece==0.2.0
 numpy==1.26.4
+funasr>=1.0.0
+librosa>=0.10.0
+modelscope>=1.10.0

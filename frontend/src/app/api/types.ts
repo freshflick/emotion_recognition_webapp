@@ -13,7 +13,7 @@
  * same list, and `verifyLabels()` in client.ts warns if the two ever drift
  * apart (e.g. someone retrains with a 6-class setup and forgets the UI).
  */
-export const BACKEND_LABELS = ["Neutral", "Happy", "Sad", "Angry"] as const;
+export const BACKEND_LABELS = ["Neutral", "Happy", "Sad", "Angry", "Frustrated"] as const;
 export type BackendLabel = (typeof BACKEND_LABELS)[number];
 
 /** Per-utterance trust weighting produced by the model's modality_judge. */
@@ -58,6 +58,8 @@ export interface HealthResponse {
   auth_disabled: boolean;
   persistence_enabled: boolean;
   labels: string[];
+  audio_model: string;
+  text_model: string;
 }
 
 /** One stored row from GET /api/reports. `data` is the jsonb blob we wrote. */

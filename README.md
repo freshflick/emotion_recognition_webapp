@@ -85,7 +85,7 @@ checkpoint:
 
 ```bash
 mkdir -p backend/checkpoints
-cp /path/to/outputs/models/fusion_model.pt backend/checkpoints/fusion_model.pt
+cp /path/to/outputs/models/iemocap_stage2_model.pt backend/checkpoints/iemocap_stage2_model.pt
 # then set USE_MOCK_MODEL=false in backend/.env
 ```
 

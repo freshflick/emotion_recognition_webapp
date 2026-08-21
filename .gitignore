@@ -22,3 +22,4 @@ dist/
 frontend/build/
 .vercel
 .env*
+/package-lock.json

@@ -98,6 +98,7 @@ export function LiveRecording() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(0);
+  const pauseStartRef = useRef<number>(0);
 
   // Elapsed-time display only. Predictions arrive from the server whenever a
   // chunk completes — they are not on this clock.
@@ -176,6 +177,7 @@ export function LiveRecording() {
   };
 
   const pauseRecording = () => {
+    pauseStartRef.current = Date.now();
     sessionRef.current?.setMuted(true);
     setIsPaused(true);
     setLevel(0);
@@ -183,9 +185,7 @@ export function LiveRecording() {
   };
 
   const resumeRecording = () => {
-    const pauseStartTime = Date.now();
-    pausedTimeRef.current += pauseStartTime - startTimeRef.current;
-    startTimeRef.current = pauseStartTime;
+    pausedTimeRef.current += Date.now() - pauseStartRef.current;
     sessionRef.current?.setMuted(false);
     setIsPaused(false);
     toast.info("Analysis resumed");
@@ -302,23 +302,25 @@ export function LiveRecording() {
             {/* Signal status — reflects the real backend, via /api/health */}
             <div className="flex flex-wrap gap-4 mt-4">
               {[
-                { label: "Microphone", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
-                {
-                  label: "Backend",
-                  status: backendReachable ? "connected" : "offline",
-                  color: backendReachable ? "#2e7d52" : "#b8312f",
-                },
-                {
-                  label: "Speech Encoder",
-                  status: !backendReachable ? "offline" : isMock ? "mock" : isActive ? "processing" : "standby",
-                  color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : isActive ? "var(--primary)" : "var(--muted-foreground)",
-                },
-                {
-                  label: "Fusion Model",
-                  status: !backendReachable ? "offline" : isMock ? "mock" : health?.model_loaded ? (isActive ? "online" : "loaded") : "no checkpoint",
-                  color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : health?.model_loaded ? "#2e7d52" : "#b8312f",
-                },
-              ].map((s) => (
+                  { label: "Microphone", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
+                  {
+                    label: "Backend",
+                    status: backendReachable ? "connected" : "offline",
+                    color: backendReachable ? "#2e7d52" : "#b8312f",
+                  },
+                  {
+                    label: "Speech Encoder",
+                    status: !backendReachable ? "offline" : isMock ? "mock" : isActive ? "processing" : "standby",
+                    color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : isActive ? "var(--primary)" : "var(--muted-foreground)",
+                  },
+                  {
+                    label: "Fusion Model",
+                    status: !backendReachable ? "offline" : isMock ? "mock" : health?.model_loaded ? (isActive ? "online" : "loaded") : "no checkpoint",
+                    color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : health?.model_loaded ? "#2e7d52" : "#b8312f",
+                  },
+                  ...(health?.audio_model ? [{ label: "Audio Model", status: health.audio_model.split("/").pop() ?? health.audio_model, color: "var(--muted-foreground)" }] : []),
+                  ...(health?.text_model ? [{ label: "Text Model", status: health.text_model.split("/").pop() ?? health.text_model, color: "var(--muted-foreground)" }] : []),
+                ].map((s) => (
                   <div key={s.label} className="flex items-center gap-2">
                     <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
                     <span className="text-xs tracking-[0.12em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
@@ -621,7 +623,6 @@ export function LiveRecording() {
                       >
                         {fusedResult ? (
                             <>
-                              <span className="text-2xl">{getEmoji(fusedResult.emotion)}</span>
                               <span className="text-lg font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[fusedResult.emotion] }}>
                             {fusedResult.emotion}
                           </span>
@@ -712,11 +713,4 @@ export function LiveRecording() {
         </div>
       </div>
   );
-}
-
-function getEmoji(emotion: Emotion): string {
-  const map: { [key in Emotion]: string } = {
-    happy: "😊", sad: "😢", angry: "😠", neutral: "😐", fearful: "😨", surprised: "😮",
-  };
-  return map[emotion];
 }

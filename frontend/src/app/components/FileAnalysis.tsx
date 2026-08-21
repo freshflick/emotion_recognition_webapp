@@ -399,6 +399,8 @@ export function FileAnalysis() {
                 status: !backendReachable ? "offline" : isMock ? "mock" : analysisComplete ? "done" : isProcessing ? "running" : health?.model_loaded ? "loaded" : "no checkpoint",
                 color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : analysisComplete ? "#2e7d52" : isProcessing ? "#1e5f8a" : health?.model_loaded ? "#2e7d52" : "#b8312f",
               },
+              ...(health?.audio_model ? [{ label: "Audio Model", status: health.audio_model.split("/").pop() ?? health.audio_model, color: "var(--muted-foreground)" }] : []),
+              ...(health?.text_model ? [{ label: "Text Model", status: health.text_model.split("/").pop() ?? health.text_model, color: "var(--muted-foreground)" }] : []),
             ].map((s) => (
                 <div key={s.label} className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
