@@ -49,11 +49,9 @@ async def lifespan(app: FastAPI):
         emotion_model.load_model(FUSION_MODEL_CHECKPOINT, device=DEVICE)
         print(f"[startup] fusion model loaded from {FUSION_MODEL_CHECKPOINT}")
 
-    if DISABLE_AUTH:
-        print(
-            "[startup] *** DISABLE_AUTH=true — every request is accepted "
-            "without a token. Local development only. ***"
-        )
+    if DISABLE_AUTH and os.getenv("ENV", "development") == "production":
+        raise RuntimeError("DISABLE_AUTH=true is not allowed when ENV=production")
+
     if not storage.is_enabled():
         print(
             "[startup] Supabase not configured — predictions work, but reports "

@@ -26,12 +26,12 @@ USE_MOCK_MODEL = _flag("USE_MOCK_MODEL")
 
 # --- Supabase ---
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
+SUPABASE_JWKS_URL = os.getenv("SUPABASE_JWKS_URL", f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json" if SUPABASE_URL else "")
 
 # Persistence is optional: without credentials the API still serves
 # predictions, it just can't save or list reports.
-SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_SECRET_KEY)
 
 # --- CORS ---
 # Vite dev server defaults, plus anything in ALLOWED_ORIGINS (comma-separated)

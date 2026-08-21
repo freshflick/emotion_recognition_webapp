@@ -44,22 +44,35 @@ async function errorMessage(res: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  console.log('📤 Request:', path, init.method || 'GET');
+
   let res: Response;
   try {
+    const authHeaders_ = await authHeaders();
+    console.log('🔑 Auth headers:', authHeaders_);
+
+    const headers = { ...authHeaders_, ...(init.headers ?? {}) };
+    console.log('📋 Final headers:', headers);
+
     res = await fetch(path, {
       ...init,
-      headers: { ...(await authHeaders()), ...(init.headers ?? {}) },
+      headers,
     });
-  } catch {
-    // fetch only rejects on network-level failure — nearly always "backend
-    // isn't running", which is the single most common issue during dev.
+    console.log('📥 Response status:', res.status);
+  } catch (error) {
+    console.error('❌ Fetch error:', error);
     throw new ApiError(
-      "Cannot reach the backend. Is it running on port 8000? (cd backend && uvicorn main:app --reload)",
-      0,
+        "Cannot reach the backend. Is it running on port 8000? (cd backend && uvicorn main:app --reload)",
+        0,
     );
   }
 
-  if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
+  if (!res.ok) {
+    const errorMsg = await errorMessage(res);
+    console.error('❌ API error:', errorMsg, res.status);
+    throw new ApiError(errorMsg, res.status);
+  }
+
   return res.json() as Promise<T>;
 }
 
