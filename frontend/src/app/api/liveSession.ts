@@ -77,6 +77,8 @@ export interface LiveSessionCallbacks {
   onError?: (message: string) => void;
   /** Fires with the current input level (0..1) for the waveform display. */
   onLevel?: (level: number) => void;
+  /** Fires when a chunk is sent to the server for processing. */
+  onProcessing?: (processing: boolean) => void;
 }
 
 export class LiveSession {
@@ -87,6 +89,8 @@ export class LiveSession {
   private source: MediaStreamAudioSourceNode | null = null;
   private muted = false;
   private closed = false;
+  private bytesSent = 0;
+  private chunkThreshold = 32000 * 2; // 2s default, updated from server
 
   private cb: LiveSessionCallbacks;
 
@@ -134,7 +138,14 @@ export class LiveSession {
       }
 
       if (this.ws?.readyState !== WebSocket.OPEN) return;
-      this.ws.send(floatToPcm16(resample(samples, inputRate, TARGET_SAMPLE_RATE)));
+      const pcm = floatToPcm16(resample(samples, inputRate, TARGET_SAMPLE_RATE));
+      this.ws.send(pcm);
+      this.bytesSent += pcm.byteLength;
+      // Notify when a chunk boundary is likely reached
+      if (this.bytesSent >= this.chunkThreshold) {
+        this.bytesSent = 0;
+        this.cb.onProcessing?.(true);
+      }
     };
 
     await this.attachTap(onSamples);
@@ -212,9 +223,11 @@ export class LiveSession {
               settled = true;
               resolve();
             }
+            this.chunkThreshold = msg.chunkBytes;
             this.cb.onReady?.({ mock: msg.mock });
             break;
           case "reading":
+            this.cb.onProcessing?.(false);
             this.cb.onReading?.(msg);
             break;
           case "summary":

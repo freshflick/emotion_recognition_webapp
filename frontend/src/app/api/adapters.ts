@@ -45,12 +45,6 @@ function toScores(probs: Record<BackendLabel, number>): Record<Emotion, number> 
 
 /**
  * Convert one backend prediction into the EmotionData the charts consume.
- *
- * `audio` and `text` intentionally receive the SAME fused distribution.
- * The model has a single classifier over the fused vector — there is no
- * audio-only or text-only emotion prediction to show. What genuinely differs
- * per modality is the trust weighting, carried on `modalityWeights` and
- * rendered as the audio/text split in the UI.
  */
 export function toEmotionData(
   timestamp: number,
@@ -58,16 +52,20 @@ export function toEmotionData(
   emotion: EmotionResult,
 ): EmotionData {
   const fused = toScores(emotion.probs);
+  const audio = emotion.audio_emotion ? toScores({ [emotion.audio_emotion.label]: emotion.audio_emotion.confidence } as Record<BackendLabel, number>) : fused;
+  const text = emotion.text_emotion ? toScores({ [emotion.text_emotion.label]: emotion.text_emotion.confidence } as Record<BackendLabel, number>) : fused;
 
   return {
     timestamp,
-    audio: fused,
-    text: fused,
+    audio,
+    text,
     fused,
     dominantEmotion: LABEL_TO_EMOTION[emotion.top_label] ?? "neutral",
     confidence: emotion.confidence,
     transcript,
     modalityWeights: emotion.modality_weights,
+    audioEmotion: emotion.audio_emotion ? { label: LABEL_TO_EMOTION[emotion.audio_emotion.label] ?? "neutral", confidence: emotion.audio_emotion.confidence } : undefined,
+    textEmotion: emotion.text_emotion ? { label: LABEL_TO_EMOTION[emotion.text_emotion.label] ?? "neutral", confidence: emotion.text_emotion.confidence } : undefined,
     isMock: emotion.mock ?? false,
   };
 }

@@ -127,8 +127,15 @@ class FusionEmotionModel(nn.Module):
         raw_fused = torch.cat(audio_feats + [text_feat, extra_feats], dim=-1)
 
         trust_scores = self.modality_judge(raw_fused)
-        audio_weight = trust_scores[:, 0].unsqueeze(1)
+
+        # Boost audio weight: shift trust toward audio so tone/pitch matter more
+        audio_boost = 2.0  # double audio influence
+        audio_weight = (trust_scores[:, 0] * audio_boost).unsqueeze(1)
         text_weight = trust_scores[:, 1].unsqueeze(1)
+        # Re-normalize so weights sum to 1
+        total = audio_weight + text_weight
+        audio_weight = audio_weight / total
+        text_weight = text_weight / total
 
         weighted_audio = [feat * audio_weight for feat in audio_feats]
         weighted_text = text_feat * text_weight
@@ -137,7 +144,21 @@ class FusionEmotionModel(nn.Module):
         logits = self.classifier(fused)
 
         if return_trust:
-            return logits, trust_scores
+            # Also compute individual modality predictions
+            with torch.no_grad():
+                # Audio-only: zero out text features
+                audio_only_fused = torch.cat(
+                    [feat * 1.0 for feat in audio_feats] + [torch.zeros_like(text_feat), extra_feats], dim=-1
+                )
+                audio_logits = self.classifier(audio_only_fused)
+
+                # Text-only: zero out audio features
+                text_only_fused = torch.cat(
+                    [torch.zeros_like(feat) for feat in audio_feats] + [text_feat, extra_feats], dim=-1
+                )
+                text_logits = self.classifier(text_only_fused)
+
+            return logits, trust_scores, audio_logits, text_logits
         return logits
 
 
@@ -148,6 +169,49 @@ _text_tokenizer = None
 _biases: torch.Tensor | None = None
 _device = "cpu"
 _mock_mode = False
+
+
+# ── text-based emotion fallback (when model confidence < 40%) ─────────────
+_TEXT_EMOTION_KEYWORDS = {
+    "Happy": [
+        "happy", "great", "good", "love", "amazing", "wonderful", "excited",
+        "glad", "pleased", "fantastic", "awesome", "nice", "enjoy", "smile",
+        "laugh", "fun", "best", "beautiful", "perfect", "thank", "grateful",
+    ],
+    "Sad": [
+        "sad", "sorry", "unfortunately", "disappointed", "miss", "lost",
+        "lonely", "depressed", "cry", "tears", "heartbroken", "regret",
+        "painful", "hurt", "suffering", "grief", "unhappy", "miserable",
+    ],
+    "Angry": [
+        "angry", "frustrated", "annoyed", "furious", "hate", "stupid",
+        "ridiculous", "terrible", "awful", "horrible", "worst", "mad",
+        "outraged", "infuriated", "livid", "disgusted", "fed up",
+    ],
+    "Frustrated": [
+        "frustrated", "stuck", "confused", "complicated", "difficult",
+        "struggling", "problem", "issue", "wrong", "broken", "fail",
+        "failing", "impossible", "can't", "cannot", "giving up",
+    ],
+}
+
+
+def _text_emotion_fallback(text: str):
+    """Simple keyword-based emotion detection for text fallback."""
+    if not text or not text.strip():
+        return None
+
+    text_lower = text.lower()
+    scores = {emotion: 0 for emotion in _TEXT_EMOTION_KEYWORDS}
+
+    for emotion, keywords in _TEXT_EMOTION_KEYWORDS.items():
+        for kw in keywords:
+            if kw in text_lower:
+                scores[emotion] += 1
+
+    # Return emotion with highest keyword matches, or None if no matches
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else None
 
 
 def load_model(checkpoint_path: str, device: str = "cpu"):
@@ -186,12 +250,19 @@ def load_model(checkpoint_path: str, device: str = "cpu"):
     _model.to(device)
     _model.eval()
 
-    # Default inference biases (zeros); overwritten by eval_opt.py offsets
-    # if present in the checkpoint
+    # Inference biases: use checkpoint biases if present, otherwise apply
+    # manual offsets to reduce Neutral bias (IEMOCAP models tend to over-
+    # predict Neutral when the audio/text don't strongly signal an emotion).
+    # Order: [Neutral, Happy, Sad, Angry, Frustrated]
     _biases = torch.zeros(NUM_LABELS, device=_device, dtype=torch.float32)
     if isinstance(state, dict) and "inference_biases" in state:
         _biases = torch.tensor(
             state["inference_biases"], device=_device, dtype=torch.float32
+        )
+    else:
+        # Manual bias: suppress Neutral, slightly boost others
+        _biases = torch.tensor(
+            [-0.8, 0.2, 0.2, 0.2, 0.2], device=_device, dtype=torch.float32
         )
 
 
@@ -286,7 +357,7 @@ def predict(waveform, text: str) -> dict:
     intensity = intensity.to(_device)
 
     with torch.no_grad():
-        logits, trust_scores = _model(
+        logits, trust_scores, audio_logits, text_logits = _model(
             audio_values,
             input_ids,
             attention_mask,
@@ -298,16 +369,42 @@ def predict(waveform, text: str) -> dict:
         # Apply inference biases if present
         if _biases is not None:
             logits = logits + _biases
+            audio_logits = audio_logits + _biases
+            text_logits = text_logits + _biases
 
         probs = torch.softmax(logits, dim=-1).squeeze().cpu().numpy()
+        audio_probs = torch.softmax(audio_logits, dim=-1).squeeze().cpu().numpy()
+        text_probs = torch.softmax(text_logits, dim=-1).squeeze().cpu().numpy()
         trust = trust_scores.squeeze().cpu().numpy()
+
+        # If top prediction confidence < 40%, model is uncertain — try text-based fallback
+        max_prob = float(probs.max())
+        if max_prob < 0.40:
+            text_emotion = _text_emotion_fallback(text)
+            if text_emotion is not None:
+                idx = LABEL_NAMES.index(text_emotion)
+                probs = np.zeros(NUM_LABELS, dtype=np.float32)
+                probs[idx] = 0.5
+                # distribute remaining probability evenly
+                remainder = 0.5 / (NUM_LABELS - 1)
+                for i in range(NUM_LABELS):
+                    if i != idx:
+                        probs[i] = remainder
 
     prob_dict = {label: float(p) for label, p in zip(LABEL_NAMES, probs)}
     top_label = max(prob_dict, key=prob_dict.get)
+
+    audio_prob_dict = {label: float(p) for label, p in zip(LABEL_NAMES, audio_probs)}
+    audio_top = max(audio_prob_dict, key=audio_prob_dict.get)
+
+    text_prob_dict = {label: float(p) for label, p in zip(LABEL_NAMES, text_probs)}
+    text_top = max(text_prob_dict, key=text_prob_dict.get)
 
     return {
         "probs": prob_dict,
         "top_label": top_label,
         "confidence": prob_dict[top_label],
         "modality_weights": {"audio": float(trust[0]), "text": float(trust[1])},
+        "audio_emotion": {"label": audio_top, "confidence": audio_prob_dict[audio_top]},
+        "text_emotion": {"label": text_top, "confidence": text_prob_dict[text_top]},
     }

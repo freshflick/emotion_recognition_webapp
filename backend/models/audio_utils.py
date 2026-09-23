@@ -59,6 +59,46 @@ def wrap_pcm16_as_wav(pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bytes
     return out.getvalue()
 
 
+def noise_gate(waveform: torch.Tensor, threshold: float = 0.01) -> torch.Tensor:
+    """Zero out samples below threshold to reduce background noise."""
+    mask = waveform.abs() < threshold
+    return waveform.masked_fill(mask, 0.0)
+
+
+def enhance_audio(waveform: torch.Tensor) -> torch.Tensor:
+    """
+    Enhance audio for better emotion analysis:
+    1. Dynamic range compression — brings quiet parts up, loud parts down
+    2. Normalization — consistent volume level
+    3. High-pass filter — removes low-frequency rumble
+    """
+    import numpy as np
+
+    wav_np = waveform.cpu().numpy()
+
+    # 1. Dynamic range compression (soft knee)
+    threshold = 0.3
+    ratio = 4.0
+    abs_wav = np.abs(wav_np)
+    mask = abs_wav > threshold
+    if np.any(mask):
+        excess = abs_wav[mask] - threshold
+        compressed = threshold + excess / ratio
+        wav_np[mask] = np.sign(wav_np[mask]) * compressed
+
+    # 2. Peak normalization to 0.7
+    peak = np.max(np.abs(wav_np))
+    if peak > 0.001:
+        wav_np = wav_np * (0.7 / peak)
+
+    # 3. Simple high-pass: remove frequencies below ~80Hz via differentiation
+    # (emotions are carried in 80Hz-4kHz range, not sub-bass rumble)
+    wav_np = wav_np - np.roll(wav_np, 1) * 0.95
+    wav_np[0] = 0
+
+    return torch.from_numpy(wav_np).to(waveform.dtype)
+
+
 def bytes_to_full_waveform(wav_bytes: bytes) -> torch.Tensor:
     """
     Decode WAV to a mono 16kHz float32 waveform of its true length.

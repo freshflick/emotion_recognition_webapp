@@ -128,6 +128,7 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
 
     segments = []
     for start_secs, end_secs, window in windows:
+        window = audio_utils.enhance_audio(window)
         window_wav = await run_blocking(audio_utils.waveform_to_wav_bytes, window)
         seg_transcript = await run_blocking(stt.transcribe, window_wav)
         seg_emotion = await run_blocking(emotion_model.predict, window, seg_transcript)

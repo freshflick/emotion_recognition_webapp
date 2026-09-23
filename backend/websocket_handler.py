@@ -47,8 +47,8 @@ from storage import save_session_report
 executor = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS)
 
 # Below this, a chunk is too short to say anything useful about (and Whisper
-# tends to hallucinate on near-silence). 0.5s of 16kHz PCM16.
-MIN_FLUSH_BYTES = SAMPLE_RATE  # 16000 bytes == 8000 samples == 0.5s
+# tends to hallucinate on near-silence). 2 seconds of 16kHz PCM16.
+MIN_FLUSH_BYTES = SAMPLE_RATE * 2  # 32000 bytes == 16000 samples == 2s
 
 
 async def run_blocking(fn, *args):
@@ -60,8 +60,8 @@ async def process_chunk(
     raw_audio_bytes: bytes, fmt: str = "pcm16", sample_rate: int = SAMPLE_RATE
 ) -> dict:
     """
-    Runs one buffered chunk of audio through: container wrapping -> transcript
-    (Whisper) -> the fusion model (audio waveform + transcript -> emotion).
+    Runs one buffered chunk of audio through: container wrapping -> VAD check
+    -> transcript (Whisper) -> the fusion model (audio waveform + transcript -> emotion).
     """
     if fmt == "pcm16":
         wav_bytes = audio_utils.wrap_pcm16_as_wav(raw_audio_bytes, sample_rate)
@@ -70,13 +70,30 @@ async def process_chunk(
 
     waveform = await run_blocking(audio_utils.bytes_to_model_waveform, wav_bytes)
 
-    transcript = await run_blocking(stt.transcribe, wav_bytes)
+    # VAD: skip chunks with no speech (saves ~1-2s per silent chunk)
+    rms = float(waveform.pow(2).mean().sqrt())
+    if rms < 0.005:
+        return {"transcript": "", "emotion": emotion_model.predict(waveform, ""), "timestamp": time.time(), "silent": True}
+
+    # Noise gate: zero out samples below threshold to reduce background noise
+    waveform = audio_utils.noise_gate(waveform, threshold=0.01)
+
+    # Enhance audio: compress dynamic range, normalize, high-pass filter
+    waveform = audio_utils.enhance_audio(waveform)
+
+    # Run Whisper and emotion model in parallel
+    transcript_future = run_blocking(stt.transcribe, wav_bytes)
+    emotion_future = run_blocking(emotion_model.predict, waveform, "")
+    transcript, emotion_result = await asyncio.gather(transcript_future, emotion_future)
+
+    # Re-run emotion model with transcript for text-audio fusion
     emotion_result = await run_blocking(emotion_model.predict, waveform, transcript)
 
     return {
         "transcript": transcript,
         "emotion": emotion_result,
         "timestamp": time.time(),
+        "silent": False,
     }
 
 

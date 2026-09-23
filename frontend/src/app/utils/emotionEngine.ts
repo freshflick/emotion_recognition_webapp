@@ -20,14 +20,9 @@ export interface EmotionData {
   dominantEmotion: Emotion;
   confidence: number;
   transcript?: string;
-  /**
-   * The model's learned per-utterance trust split between the audio and text
-   * branches (its modality_judge output). This is a weighting, not a
-   * per-modality emotion prediction — `audio` and `text` above both carry the
-   * fused distribution, because a single classifier produces it.
-   */
   modalityWeights?: { audio: number; text: number };
-  /** True when the backend served a randomised placeholder, not a real result. */
+  audioEmotion?: { label: Emotion; confidence: number };
+  textEmotion?: { label: Emotion; confidence: number };
   isMock?: boolean;
 }
 

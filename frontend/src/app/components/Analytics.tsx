@@ -287,7 +287,7 @@ export function Analytics() {
                 <ResponsiveContainer width="100%" height={320}>
                   <PieChart>
                     <Pie data={pieChartData} cx="50%" cy="50%" labelLine={false}
-                         label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                         label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
                          outerRadius={110} dataKey="value">
                       {pieChartData.map((entry, index) => (
                           <Cell key={`pie-cell-${index}`} fill={entry.color} />
@@ -395,7 +395,7 @@ export function Analytics() {
                       <ResponsiveContainer width="100%" height={280}>
                         <PieChart>
                           <Pie data={comparisonData} cx="50%" cy="50%" labelLine={false}
-                               label={({ name, value }) => total > 0 ? `${name}: ${((value / total) * 100).toFixed(0)}%` : `${name}: 0%`}
+                               label={({ name, value }) => total > 0 && value / total > 0.05 ? `${name}: ${((value / total) * 100).toFixed(0)}%` : ''}
                                outerRadius={100} dataKey="value">
                             {comparisonData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.color} />

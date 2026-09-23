@@ -55,9 +55,11 @@ FUSION_MODEL_CHECKPOINT = os.getenv(
     "FUSION_MODEL_CHECKPOINT", "checkpoints/fusion_model.pt"
 )
 
+import multiprocessing
+
 # --- Runtime ---
-DEVICE = os.getenv("DEVICE", "cpu")  # set to "cuda" once you're on the GPU box
-INFERENCE_WORKERS = int(os.getenv("INFERENCE_WORKERS", "2"))
+DEVICE = os.getenv("DEVICE", "cpu")
+INFERENCE_WORKERS = int(os.getenv("INFERENCE_WORKERS", str(min(multiprocessing.cpu_count(), 4))))
 
 # --- Audio format, must match dataset.py exactly ---
 SAMPLE_RATE = 16_000
@@ -70,4 +72,4 @@ MAX_AUDIO_SAMPLES = SAMPLE_RATE * MAX_AUDIO_SECS
 # so the default below is ~4 seconds of speech per prediction.
 # This is independent of MAX_AUDIO_SECS above — that's the model's fixed
 # input window; this is how often you re-run the model during a live session.
-CHUNK_THRESHOLD_BYTES = int(os.getenv("CHUNK_THRESHOLD_BYTES", str(32000 * 4)))
+CHUNK_THRESHOLD_BYTES = int(os.getenv("CHUNK_THRESHOLD_BYTES", str(32000 * 3)))

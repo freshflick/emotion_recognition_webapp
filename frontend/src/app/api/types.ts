@@ -27,7 +27,8 @@ export interface EmotionResult {
   top_label: BackendLabel;
   confidence: number;
   modality_weights: ModalityWeights;
-  /** True when the backend is serving randomised placeholders. */
+  audio_emotion?: { label: BackendLabel; confidence: number };
+  text_emotion?: { label: BackendLabel; confidence: number };
   mock?: boolean;
 }
 

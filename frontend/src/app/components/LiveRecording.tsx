@@ -87,10 +87,13 @@ export function LiveRecording() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [duration, setDuration] = useState(0);
   const [level, setLevel] = useState(0);
   const [emotionData, setEmotionData] = useState<EmotionData[]>([]);
+  const [windowEmotionData, setWindowEmotionData] = useState<EmotionData[]>([]);
   const [currentEmotion, setCurrentEmotion] = useState<EmotionData | null>(null);
+  const WINDOW_SECS = 5;
   const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
@@ -121,12 +124,14 @@ export function LiveRecording() {
   const startRecording = async () => {
     setIsConnecting(true);
     setEmotionData([]);
+    setWindowEmotionData([]);
     setTranscript([]);
     setCurrentEmotion(null);
     setDuration(0);
 
     const session = new LiveSession({
       onLevel: setLevel,
+      onProcessing: setIsProcessing,
       onReading: ({ transcript: text, emotion, timestamp }) => {
         const elapsed = Math.max(
           0,
@@ -134,13 +139,54 @@ export function LiveRecording() {
         );
         const reading = toEmotionData(elapsed, text, emotion);
         setEmotionData((prev) => [...prev, reading]);
-        setCurrentEmotion(reading);
+        setWindowEmotionData((prev) => {
+          const windowStart = elapsed - WINDOW_SECS;
+          const updated = [...prev, reading].filter((r) => r.timestamp >= windowStart);
+          // Compute current emotion as average over the window
+          if (updated.length > 0) {
+            const avgFused = { happy: 0, sad: 0, angry: 0, neutral: 0, fearful: 0, surprised: 0 };
+            for (const r of updated) {
+              for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
+                avgFused[k] += r.fused[k];
+              }
+            }
+            for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
+              avgFused[k] /= updated.length;
+            }
+            const entries = Object.entries(avgFused) as [Emotion, number][];
+            const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
+            setCurrentEmotion({
+              timestamp: elapsed,
+              fused: avgFused,
+              dominantEmotion: dominant[0],
+              isMock: reading.isMock,
+              modalityWeights: reading.modalityWeights,
+              audioEmotion: reading.audioEmotion,
+              textEmotion: reading.textEmotion,
+            });
+          }
+          return updated;
+        });
         // Whisper returns "" for silence — no point adding an empty line.
         if (text.trim()) {
-          setTranscript((prev) => [
-            ...prev,
-            { time: elapsed, text, emotion: reading.dominantEmotion },
-          ]);
+          setTranscript((prev) => {
+            const last = prev[prev.length - 1];
+            // Merge if this chunk continues the previous sentence:
+            // - starts with lowercase, OR
+            // - previous ended with "..." or no terminal punctuation
+            const continuesSentence = last && (
+              /^[a-z]/.test(text) ||
+              /\.\.\.$/.test(last.text) ||
+              (!/[.!?:]$/.test(last.text) && !/[.!?:]/.test(text))
+            );
+            if (continuesSentence) {
+              return [
+                ...prev.slice(0, -1),
+                { ...last, text: last.text.replace(/\.\.\.$/, ' ') + text },
+              ];
+            }
+            return [...prev, { time: elapsed, text, emotion: reading.dominantEmotion }];
+          });
         }
       },
       onError: (message) => toast.error(message),
@@ -204,6 +250,7 @@ export function LiveRecording() {
     setIsRecording(false);
     setIsPaused(false);
     setIsSaving(false);
+    setIsProcessing(false);
 
     if (emotionData.length === 0) {
       toast.error("No speech was analysed — nothing to save");
@@ -299,39 +346,37 @@ export function LiveRecording() {
               )}
             </div>
 
-            {/* Signal status — reflects the real backend, via /api/health */}
-            <div className="flex flex-wrap gap-4 mt-4">
+            {/* Signal status — compact two-row layout */}
+            <div className="grid grid-cols-3 gap-x-6 gap-y-2 mt-4">
               {[
-                  { label: "Microphone", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
+                  { label: "Mic", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
                   {
                     label: "Backend",
-                    status: backendReachable ? "connected" : "offline",
+                    status: backendReachable ? "online" : "offline",
                     color: backendReachable ? "#2e7d52" : "#b8312f",
                   },
                   {
-                    label: "Speech Encoder",
-                    status: !backendReachable ? "offline" : isMock ? "mock" : isActive ? "processing" : "standby",
-                    color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : isActive ? "var(--primary)" : "var(--muted-foreground)",
-                  },
-                  {
-                    label: "Fusion Model",
-                    status: !backendReachable ? "offline" : isMock ? "mock" : health?.model_loaded ? (isActive ? "online" : "loaded") : "no checkpoint",
+                    label: "Model",
+                    status: !backendReachable ? "—" : isMock ? "mock" : health?.model_loaded ? "loaded" : "—",
                     color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : health?.model_loaded ? "#2e7d52" : "#b8312f",
                   },
-                  ...(health?.audio_model ? [{ label: "Audio Model", status: health.audio_model.split("/").pop() ?? health.audio_model, color: "var(--muted-foreground)" }] : []),
-                  ...(health?.text_model ? [{ label: "Text Model", status: health.text_model.split("/").pop() ?? health.text_model, color: "var(--muted-foreground)" }] : []),
                 ].map((s) => (
-                  <div key={s.label} className="flex items-center gap-2">
+                  <div key={s.label} className="flex items-center gap-1.5">
                     <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
-                    <span className="text-xs tracking-[0.12em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                    <span className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
                   {s.label}
                 </span>
-                    <span className="text-xs tracking-widest uppercase font-semibold" style={{ color: s.color, fontFamily: sans }}>
+                    <span className="text-[11px] tracking-widest uppercase font-semibold" style={{ color: s.color, fontFamily: sans }}>
                   {s.status}
                 </span>
                   </div>
               ))}
             </div>
+            {health?.audio_model && (
+              <p className="text-[11px] text-muted-foreground/60 mt-2" style={{ fontFamily: mono }}>
+                {health.audio_model.split("/").pop()} + {health.text_model?.split("/").pop()}
+              </p>
+            )}
           </div>
 
           {/* Results shown here are only as real as the backend serving them —
@@ -446,6 +491,15 @@ export function LiveRecording() {
                     </div>
 
                     <div className="w-full"><WaveformBars active={isActive} level={level} /></div>
+
+                    {isProcessing && isActive && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <span className="size-1.5 rounded-full animate-pulse inline-block" style={{ backgroundColor: "var(--primary)" }} />
+                          <span className="text-xs tracking-wider uppercase" style={{ fontFamily: sans, color: "var(--primary)" }}>
+                            Processing…
+                          </span>
+                        </div>
+                    )}
 
                     {isRecording && (
                         <div className="flex gap-2 w-full">
@@ -576,7 +630,7 @@ export function LiveRecording() {
                               >
                           {entry.emotion}
                         </span>
-                              <span className="text-sm text-foreground leading-relaxed" style={{ fontFamily: sans, fontWeight: 400 }}>
+                              <span className="text-sm text-foreground leading-relaxed" style={{ fontFamily: sans, fontWeight: 400, wordBreak: "break-word" }}>
                           {entry.text}
                         </span>
                             </div>
@@ -646,7 +700,7 @@ export function LiveRecording() {
                     {/* Live modality trust weights */}
                     <div>
                       <span className="text-xs tracking-[0.14em] uppercase font-semibold block mb-3" style={{ fontFamily: sans, color: "var(--muted-foreground)" }}>
-                        Modality Trust · Learned Per Utterance
+                        Modality Trust · Audio vs Text
                       </span>
                       <div
                           className="border p-4 min-h-[130px] flex flex-col justify-center gap-4"
@@ -655,13 +709,13 @@ export function LiveRecording() {
                         {weights ? (
                             <>
                               {([
-                                { label: "Audio · voice", value: weights.audio, color: "var(--primary)" },
-                                { label: "Text · words", value: weights.text, color: "#1e5f8a" },
+                                { label: "Audio", value: weights.audio, color: "var(--primary)", emotion: currentEmotion?.audioEmotion },
+                                { label: "Text", value: weights.text, color: "#1e5f8a", emotion: currentEmotion?.textEmotion },
                               ] as const).map((row) => (
                                   <div key={row.label} className="flex items-center gap-3">
-                                <span className="text-xs w-24 tracking-wide uppercase text-muted-foreground" style={{ fontFamily: sans }}>
-                                  {row.label}
-                                </span>
+                                <span className="text-xs w-16 tracking-wide uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                      {row.label}
+                    </span>
                                     <div className="flex-1 h-2" style={{ backgroundColor: "var(--muted)" }}>
                                       <div
                                           className="h-full transition-all duration-500"
@@ -671,10 +725,18 @@ export function LiveRecording() {
                                     <span className="text-xs tabular-nums w-9 text-right text-muted-foreground" style={{ fontFamily: mono }}>
                                   {(row.value * 100).toFixed(0)}%
                                 </span>
+                                    {row.emotion && (
+                                        <span
+                                            className="text-xs px-1.5 py-0.5 uppercase font-semibold tracking-wider"
+                                            style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[row.emotion.label as Emotion] ?? "var(--foreground)", fontFamily: sans }}
+                                        >
+                                      {row.emotion.label}
+                                    </span>
+                                    )}
                                   </div>
                               ))}
-                              <p className="text-xs text-muted-foreground/70 leading-snug" style={{ fontFamily: sans }}>
-                                How far the model trusted each signal for this chunk — not a separate prediction per modality.
+                              <p className="text-xs text-muted-foreground/60 leading-snug mt-1" style={{ fontFamily: sans }}>
+                                Audio = tone/pitch · Text = words · Fused = combined
                               </p>
                             </>
                         ) : (
