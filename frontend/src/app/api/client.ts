@@ -44,21 +44,17 @@ async function errorMessage(res: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  console.log('📤 Request:', path, init.method || 'GET');
 
   let res: Response;
   try {
     const authHeaders_ = await authHeaders();
-    console.log('🔑 Auth headers:', authHeaders_);
 
     const headers = { ...authHeaders_, ...(init.headers ?? {}) };
-    console.log('📋 Final headers:', headers);
 
     res = await fetch(path, {
       ...init,
       headers,
     });
-    console.log('📥 Response status:', res.status);
   } catch (error) {
     console.error('❌ Fetch error:', error);
     throw new ApiError(
@@ -78,6 +74,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health");
+}
+
+export interface QuoteResponse {
+  text: string;
+  author: string;
+}
+
+/** One quote per calendar day, fetched server-side (see main.py's /api/quote —
+ *  it calls the upstream quotes API itself so the browser never has to deal
+ *  with that API's own CORS policy). Unauthenticated; same for every user. */
+export function getQuote(): Promise<QuoteResponse> {
+  return request<QuoteResponse>("/api/quote");
 }
 
 /** Upload one complete audio file and get a single fused prediction back. */

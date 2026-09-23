@@ -41,6 +41,11 @@ export function updateUser(updates: Partial<UserProfile>): UserProfile {
 }
 
 // Motivational quotes
+//
+// This list is now only a fallback — getSessionQuote() below fetches a real
+// quote from getQuote() (backend's /api/quote, which itself proxies a free
+// public quotes API) and only falls back to picking from here if that
+// request fails, so the dashboard never ends up with no quote at all.
 const MOTIVATIONAL_QUOTES = [
   {
     text: "Your emotions are the slaves to your thoughts, and you are the slave to your emotions.",
@@ -86,25 +91,41 @@ const MOTIVATIONAL_QUOTES = [
 
 const QUOTE_STORAGE_KEY = "emotionmonitor_session_quote";
 
-export function getSessionQuote(): { text: string; author: string } {
+// One quote per day — matches the backend's own per-calendar-day cache, so
+// this is purely to avoid an extra network round-trip on every page load
+// within the same day, not a second source of "freshness".
+const QUOTE_CACHE_MS = 24 * 60 * 60 * 1000;
+
+export async function getSessionQuote(): Promise<{ text: string; author: string }> {
   const stored = localStorage.getItem(QUOTE_STORAGE_KEY);
   if (stored) {
     try {
       const data = JSON.parse(stored);
-      // Check if it's from the same session (within last 4 hours)
-      if (Date.now() - data.timestamp < 4 * 60 * 60 * 1000) {
+      if (Date.now() - data.timestamp < QUOTE_CACHE_MS) {
         return data.quote;
       }
     } catch {
-      // Fall through to generate new quote
+      // Fall through to fetch a new quote
     }
   }
 
-  // Generate new quote
-  const quote = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+  let quote: { text: string; author: string };
+  try {
+    // Lazily imported to avoid a circular import between this file and
+    // api/client.ts at module-load time.
+    const { getQuote } = await import("../api/client");
+    quote = await getQuote();
+  } catch {
+    // Backend unreachable or the upstream quotes API is down — the backend
+    // already tries its own fallback list first, so reaching here means
+    // both that and the request itself failed. Fall back locally rather
+    // than leaving the dashboard with nothing.
+    quote = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+  }
+
   localStorage.setItem(
-    QUOTE_STORAGE_KEY,
-    JSON.stringify({ quote, timestamp: Date.now() })
+      QUOTE_STORAGE_KEY,
+      JSON.stringify({ quote, timestamp: Date.now() })
   );
   return quote;
 }

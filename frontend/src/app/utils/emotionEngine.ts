@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 // NOTE: the model predicts four labels (neutral/happy/sad/angry). `fearful`
 // and `surprised` are placeholders pending the planned UI narrowing — see the
 // header comment in api/adapters.ts for how to remove them.
-export type Emotion = "happy" | "sad" | "angry" | "neutral" | "fearful" | "surprised";
+export type Emotion = "happy" | "sad" | "angry" | "neutral";
 
 export interface EmotionData {
   timestamp: number;
@@ -41,7 +41,7 @@ export interface Session {
   };
 }
 
-const EMOTIONS: Emotion[] = ["happy", "sad", "angry", "neutral", "fearful", "surprised"];
+const EMOTIONS: Emotion[] = ["happy", "sad", "angry", "neutral"];
 
 // Generate random emotion probabilities that sum to 1
 export function generateEmotionScores(): { [key in Emotion]: number } {
@@ -181,8 +181,6 @@ export function calculateSessionSummary(emotionData: EmotionData[]) {
     sad: 0,
     angry: 0,
     neutral: 0,
-    fearful: 0,
-    surprised: 0,
   };
 
   let totalConfidence = 0;

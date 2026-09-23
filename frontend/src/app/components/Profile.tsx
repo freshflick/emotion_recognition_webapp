@@ -14,6 +14,7 @@ import { supabase } from "../lib/supabase";
 export function Profile() {
   const { user, updateUserProfile } = useUser();
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: user.name,
     email: user.email,
@@ -57,13 +58,13 @@ export function Profile() {
       const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
 
       const bustedUrl = `${publicUrl}?t=${Date.now()}`;
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: { avatar_url: bustedUrl },
-      });
-      if (updateError) throw updateError;
 
+      // Persist through updateUserProfile (which now writes to Supabase Auth
+      // metadata too) rather than setting local state directly — otherwise
+      // this avatar would get wiped on the next token refresh, same as the
+      // name/bio bug this file used to have.
+      updateUserProfile({avatar: bustedUrl});
       setFormData((prev) => ({ ...prev, avatar: bustedUrl }));
-      updateUserProfile({ avatar: bustedUrl });
       toast.success("Profile picture updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -82,15 +83,32 @@ export function Profile() {
       return;
     }
 
-    updateUserProfile({
-      name: formData.name,
-      email: formData.email,
-      bio: formData.bio,
-      avatar: formData.avatar,
-    });
+    const emailChanged = formData.email !== user.email;
 
-    setIsEditing(false);
-    toast.success("Profile updated successfully");
+    setIsSaving(true);
+    try {
+      updateUserProfile({
+        name: formData.name,
+        email: formData.email,
+        bio: formData.bio,
+        avatar: formData.avatar,
+      });
+
+      setIsEditing(false);
+      toast.success(
+          emailChanged
+              ? "Profile updated — check your inbox to confirm the new email address"
+              : "Profile updated successfully",
+      );
+    } catch (err) {
+      // Previously this always showed a success toast even when the write
+      // failed, because updateUserProfile only touched local state and
+      // couldn't fail. Now it can (e.g. Supabase rejects the email change),
+      // so surface that instead of pretending it worked.
+      toast.error(err instanceof Error ? err.message : "Could not save profile");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -138,12 +156,12 @@ export function Profile() {
                 </Button>
               ) : (
                 <div className="flex gap-2">
-                  <Button onClick={handleCancel} variant="outline" size="sm">
+                  <Button onClick={handleCancel} variant="outline" size="sm" disabled={isSaving}>
                     Cancel
                   </Button>
-                  <Button onClick={handleSave} size="sm">
+                  <Button onClick={handleSave} size="sm" disabled={isSaving}>
                     <Save className="size-4 mr-2" />
-                    Save Changes
+                    {isSaving ? "Saving…" : "Save Changes"}
                   </Button>
                 </div>
               )}
@@ -219,20 +237,27 @@ export function Profile() {
                 <div>
                   <Label htmlFor="email">Email Address</Label>
                   {isEditing ? (
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, email: e.target.value })
-                      }
-                      className="mt-1"
-                    />
+                      <>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) =>
+                              setFormData({ ...formData, email: e.target.value })
+                          }
+                          className="mt-1"
+                        />
+                        {formData.email !== user.email && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Changing your email requires confirming it from your inbox before it takes effect.
+                          </p>
+                        )}
+                      </>
                   ) : (
-                    <div className="mt-1 flex items-center gap-2">
-                      <Mail className="size-4 text-gray-500" />
-                      <span>{user.email}</span>
-                    </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Mail className="size-4 text-gray-500" />
+                        <span>{user.email}</span>
+                      </div>
                   )}
                 </div>
 
