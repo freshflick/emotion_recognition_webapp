@@ -22,7 +22,7 @@ import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
-  neutral: "#786c5c", fearful: "#7a3a8a", surprised: "#2e7d52",
+  neutral: "#786c5c"
 };
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -91,8 +91,8 @@ export function LiveRecording() {
   const [duration, setDuration] = useState(0);
   const [level, setLevel] = useState(0);
   const [emotionData, setEmotionData] = useState<EmotionData[]>([]);
-  const [windowEmotionData, setWindowEmotionData] = useState<EmotionData[]>([]);
   const [currentEmotion, setCurrentEmotion] = useState<EmotionData | null>(null);
+  const windowEmotionDataRef = useRef<EmotionData[]>([]);
   const WINDOW_SECS = 5;
   const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -124,7 +124,7 @@ export function LiveRecording() {
   const startRecording = async () => {
     setIsConnecting(true);
     setEmotionData([]);
-    setWindowEmotionData([]);
+    windowEmotionDataRef.current = [];
     setTranscript([]);
     setCurrentEmotion(null);
     setDuration(0);
@@ -134,59 +134,54 @@ export function LiveRecording() {
       onProcessing: setIsProcessing,
       onReading: ({ transcript: text, emotion, timestamp }) => {
         const elapsed = Math.max(
-          0,
-          Math.round((timestamp * 1000 - startTimeRef.current) / 1000),
+            0,
+            Math.round((timestamp * 1000 - startTimeRef.current) / 1000),
         );
         const reading = toEmotionData(elapsed, text, emotion);
         setEmotionData((prev) => [...prev, reading]);
-        setWindowEmotionData((prev) => {
-          const windowStart = elapsed - WINDOW_SECS;
-          const updated = [...prev, reading].filter((r) => r.timestamp >= windowStart);
-          // Compute current emotion as average over the window
-          if (updated.length > 0) {
-            const avgFused = { happy: 0, sad: 0, angry: 0, neutral: 0, fearful: 0, surprised: 0 };
-            for (const r of updated) {
-              for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
-                avgFused[k] += r.fused[k];
-              }
-            }
+
+        // Rolling window average, kept in a ref rather than state — this is
+        // an internal computation input, not something the UI renders
+        // directly, so it doesn't need to trigger its own re-render.
+        const windowStart = elapsed - WINDOW_SECS;
+        const updated = [...windowEmotionDataRef.current, reading].filter(
+            (r) => r.timestamp >= windowStart,
+        );
+        windowEmotionDataRef.current = updated;
+
+        if (updated.length > 0) {
+          const avgFused = { happy: 0, sad: 0, angry: 0, neutral: 0 };
+          for (const r of updated) {
             for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
-              avgFused[k] /= updated.length;
+              avgFused[k] += r.fused[k];
             }
-            const entries = Object.entries(avgFused) as [Emotion, number][];
-            const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
-            setCurrentEmotion({
-              timestamp: elapsed,
-              fused: avgFused,
-              dominantEmotion: dominant[0],
-              isMock: reading.isMock,
-              modalityWeights: reading.modalityWeights,
-              audioEmotion: reading.audioEmotion,
-              textEmotion: reading.textEmotion,
-            });
           }
-          return updated;
-        });
+          for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
+            avgFused[k] /= updated.length;
+          }
+          const entries = Object.entries(avgFused) as [Emotion, number][];
+          const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
+
+          setCurrentEmotion({
+            timestamp: elapsed,
+            fused: avgFused,
+            audio: avgFused,
+            text: avgFused,
+            dominantEmotion: dominant[0],
+            confidence: dominant[1],
+            isMock: reading.isMock,
+            modalityWeights: reading.modalityWeights,
+            audioEmotion: reading.audioEmotion,
+            textEmotion: reading.textEmotion,
+          });
+        }
+
         // Whisper returns "" for silence — no point adding an empty line.
         if (text.trim()) {
-          setTranscript((prev) => {
-            const last = prev[prev.length - 1];
-            // Merge if this chunk continues the previous sentence:
-            // - starts with lowercase, OR
-            // - previous ended with "..." or no terminal punctuation
-            const continuesSentence = last && (
-              /^[a-z]/.test(text) ||
-              /\.\.\.$/.test(last.text) ||
-              (!/[.!?:]$/.test(last.text) && !/[.!?:]/.test(text))
-            );
-            if (continuesSentence) {
-              return [
-                ...prev.slice(0, -1),
-                { ...last, text: last.text.replace(/\.\.\.$/, ' ') + text },
-              ];
-            }
-            return [...prev, { time: elapsed, text, emotion: reading.dominantEmotion }];
-          });
+          setTranscript((prev) => [
+            ...prev,
+            { time: elapsed, text, emotion: reading.dominantEmotion },
+          ]);
         }
       },
       onError: (message) => toast.error(message),
@@ -198,12 +193,11 @@ export function LiveRecording() {
       session.teardown();
       setIsConnecting(false);
       const message = err instanceof Error ? err.message : String(err);
-      // Mic permission failures come back as DOMExceptions from getUserMedia.
       if (err instanceof DOMException) {
         toast.error(
-          err.name === "NotAllowedError"
-            ? "Microphone access denied. Allow it in your browser settings and try again."
-            : "Could not access the microphone.",
+            err.name === "NotAllowedError"
+                ? "Microphone access denied. Allow it in your browser settings and try again."
+                : "Could not access the microphone.",
         );
       } else {
         toast.error(message);
@@ -218,7 +212,7 @@ export function LiveRecording() {
     setIsRecording(true);
     setIsPaused(false);
     toast.success(
-      isMock ? "Analysis started (mock mode — placeholder results)" : "Analysis started",
+        isMock ? "Analysis started (mock mode — placeholder results)" : "Analysis started",
     );
   };
 
@@ -284,8 +278,6 @@ export function LiveRecording() {
     sad: (data.fused.sad * 100).toFixed(1),
     angry: (data.fused.angry * 100).toFixed(1),
     neutral: (data.fused.neutral * 100).toFixed(1),
-    fearful: (data.fused.fearful * 100).toFixed(1),
-    surprised: (data.fused.surprised * 100).toFixed(1),
   }));
 
   const formatDuration = (seconds: number) => {

@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
-  neutral: "#786c5c", fearful: "#7a3a8a", surprised: "#2e7d52",
+  neutral: "#786c5c"
 };
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -129,7 +129,7 @@ export function Reports() {
 
   // Emotion distribution
   const emotionCounts: { [key in Emotion]: number } = {
-    happy: 0, sad: 0, angry: 0, neutral: 0, fearful: 0, surprised: 0,
+    happy: 0, sad: 0, angry: 0, neutral: 0
   };
 
   filteredSessions.forEach((session) => {

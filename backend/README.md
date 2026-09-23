@@ -122,7 +122,7 @@ the UI uses it to drive its status indicators.
 ```json
 {"status": "ok", "model_loaded": true, "mock_mode": false,
  "auth_disabled": false, "persistence_enabled": true,
- "labels": ["Neutral", "Happy", "Sad", "Angry", "Frustrated"]}
+ "labels": ["Neutral", "Happy", "Sad", "Angry"]}
 ```
 
 **`POST /api/analyze-file`** — upload one audio file, get a timeline back.

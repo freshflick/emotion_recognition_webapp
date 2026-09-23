@@ -23,11 +23,8 @@ const LABEL_TO_EMOTION: Record<BackendLabel, Emotion> = {
   Frustrated: "angry",
 };
 
-/** Frontend keys the model has no output for. Delete when the UI moves to 4. */
-const UNSUPPORTED_EMOTIONS: Emotion[] = ["fearful", "surprised"];
-
 function emptyScores(): Record<Emotion, number> {
-  return { happy: 0, sad: 0, angry: 0, neutral: 0, fearful: 0, surprised: 0 };
+  return { happy: 0, sad: 0, angry: 0, neutral: 0 };
 }
 
 /** Map the backend's 4-label probability dict onto the UI's score shape. */
@@ -39,7 +36,6 @@ function toScores(probs: Record<BackendLabel, number>): Record<Emotion, number> 
     // retrained with more classes, the UI degrades instead of breaking.
     if (key) scores[key] = value;
   }
-  for (const key of UNSUPPORTED_EMOTIONS) scores[key] = 0;
   return scores;
 }
 

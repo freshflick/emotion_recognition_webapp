@@ -30,8 +30,6 @@ const EMOTION_COLORS: { [key in Emotion]: string } = {
   sad: "#1e5f8a",
   angry: "#b8312f",
   neutral: "#786c5c",
-  fearful: "#7a3a8a",
-  surprised: "#2e7d52",
 };
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -86,8 +84,6 @@ export function Analytics() {
     sad: 0,
     angry: 0,
     neutral: 0,
-    fearful: 0,
-    surprised: 0,
   };
 
   filteredSessions.forEach((s) => {
@@ -124,8 +120,6 @@ export function Analytics() {
         sad: 0,
         angry: 0,
         neutral: 0,
-        fearful: 0,
-        surprised: 0,
       };
     }
     dailyBreakdown[date][session.summary.dominantEmotion]++;
@@ -138,8 +132,6 @@ export function Analytics() {
     sad: 0,
     angry: 0,
     neutral: 0,
-    fearful: 0,
-    surprised: 0,
   };
 
   let intensityCount = 0;
@@ -310,8 +302,6 @@ export function Analytics() {
                   <Bar name="sad" dataKey="sad" stackId="a" fill={EMOTION_COLORS.sad} />
                   <Bar name="angry" dataKey="angry" stackId="a" fill={EMOTION_COLORS.angry} />
                   <Bar name="neutral" dataKey="neutral" stackId="a" fill={EMOTION_COLORS.neutral} />
-                  <Bar name="fearful" dataKey="fearful" stackId="a" fill={EMOTION_COLORS.fearful} />
-                  <Bar name="surprised" dataKey="surprised" stackId="a" fill={EMOTION_COLORS.surprised} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartShell>
@@ -382,8 +372,8 @@ export function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ChartShell title="Positive vs Negative vs Neutral">
                 {(() => {
-                  const positive = emotionCounts.happy + emotionCounts.surprised;
-                  const negative = emotionCounts.sad + emotionCounts.angry + emotionCounts.fearful;
+                  const positive = emotionCounts.happy;
+                  const negative = emotionCounts.sad + emotionCounts.angry;
                   const neutral = emotionCounts.neutral;
                   const total = positive + negative + neutral;
                   const comparisonData = [

@@ -1,6 +1,9 @@
 import os
+import random
+import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +25,25 @@ from websocket_handler import handle_audio_session, run_blocking
 # Mirrors the "Max 50 MB" the upload UI advertises.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
+# --- Quote of the day ---
+# Fetched server-side (not from the browser) specifically to sidestep the
+# upstream API's inconsistent CORS support — some clients report it working,
+# some report it blocked, depending on origin. Calling it from the backend
+# avoids that question entirely. Cached once per calendar day and shared
+# across every signed-in user, so a busy dashboard doesn't turn into one
+# outbound request per page load.
+QUOTE_API_URL = "https://zenquotes.io/api/random"
+
+_quote_cache: dict = {"quote": None, "date": None}
+
+async def _fetch_quote_from_api() -> dict:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        resp = await client.get(QUOTE_API_URL)
+        resp.raise_for_status()
+        data = resp.json()
+        # ZenQuotes wraps a single result in a one-item array: [{"q": ..., "a": ...}]
+        return {"text": data[0]["q"], "author": data[0]["a"]}
+    return None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -89,6 +111,25 @@ async def health():
         "text_model": emotion_model.TEXT_MODEL_NAME,
     }
 
+
+@app.get("/api/quote")
+async def quote():
+    """
+    One quote per calendar day (server time), shared by every user, backed
+    by a free public API with a local fallback if it's unreachable or rate
+    limits us. Deliberately unauthenticated — it's the same for everyone on
+    a given day, so there's nothing user-specific to protect.
+    """
+    today = time.strftime("%Y-%m-%d")
+    if _quote_cache["date"] != today or _quote_cache["quote"] is None:
+        try:
+            _quote_cache["quote"] = await _fetch_quote_from_api()
+        except Exception as e:
+            print(f"[warn] quote API unreachable, using fallback: {e}")
+            _quote_cache["quote"] = random.choice(FALLBACK_QUOTES)
+        _quote_cache["date"] = today
+
+    return _quote_cache["quote"]
 
 @app.post("/api/analyze-file")
 async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user)):

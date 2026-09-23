@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import {
     LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -16,8 +16,6 @@ const EMOTION_COLORS: { [key in Emotion]: string } = {
     sad: "#1e5f8a",
     angry: "#b8312f",
     neutral: "#786c5c",
-    fearful: "#7a3a8a",
-    surprised: "#2e7d52",
 };
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -59,8 +57,22 @@ function StatBlock({
 export function Dashboard() {
     const { user } = useUser();
     const sessions = useSessionStore();
-    const [quote] = useState(getSessionQuote());
+    const [quote, setQuote] = useState<{ text: string; author: string } | null>(null);
     const [greeting] = useState(getTimeBasedGreeting());
+
+    // getSessionQuote() now hits the backend (/api/quote) the first time it's
+    // called each day, so it's async — fetch it in an effect rather than
+    // calling it straight in useState, and render nothing in the quote slot
+    // until it resolves rather than blocking the rest of the page on it.
+    useEffect(() => {
+        let cancelled = false;
+        getSessionQuote().then((q) => {
+            if (!cancelled) setQuote(q);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const totalSessions = sessions.length;
     const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
@@ -70,7 +82,7 @@ export function Dashboard() {
             : 0;
 
     const emotionDistribution: { [key in Emotion]: number } = {
-        happy: 0, sad: 0, angry: 0, neutral: 0, fearful: 0, surprised: 0,
+        happy: 0, sad: 0, angry: 0, neutral: 0,
     };
     sessions.forEach((session) => {
         Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
@@ -150,18 +162,20 @@ export function Dashboard() {
             All systems online
           </span>
                 </div>
-                <div
-                    className="flex-1 border-l pl-5 italic text-sm text-muted-foreground leading-relaxed min-w-[240px]"
-                    style={{ fontFamily: serif, borderColor: "var(--border)" }}
-                >
-                    "{quote.text}"
-                    <span
-                        className="not-italic ml-2 text-xs tracking-wider uppercase text-muted-foreground/60"
-                        style={{ fontFamily: sans }}
+                {quote && (
+                    <div
+                        className="flex-1 border-l pl-5 italic text-sm text-muted-foreground leading-relaxed min-w-[240px]"
+                        style={{ fontFamily: serif, borderColor: "var(--border)" }}
                     >
-            — {quote.author}
-          </span>
-                </div>
+                        "{quote.text}"
+                        <span
+                            className="not-italic ml-2 text-xs tracking-wider uppercase text-muted-foreground/60"
+                            style={{ fontFamily: sans }}
+                        >
+              — {quote.author}
+            </span>
+                    </div>
+                )}
             </div>
 
             {/* Quick actions */}
