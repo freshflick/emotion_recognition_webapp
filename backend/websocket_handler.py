@@ -46,10 +46,6 @@ from storage import save_session_report
 
 executor = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS)
 
-# Below this, a chunk is too short to say anything useful about (and Whisper
-# tends to hallucinate on near-silence). 2 seconds of 16kHz PCM16.
-MIN_FLUSH_BYTES = SAMPLE_RATE * 2  # 32000 bytes == 16000 samples == 2s
-
 
 async def run_blocking(fn, *args):
     loop = asyncio.get_running_loop()
