@@ -3,7 +3,6 @@
 
 # Secrets — never commit. Copy the .example files and fill them in locally.
 .env
-.env.local
 backend/.env
 
 # Python
@@ -21,5 +20,4 @@ backend/checkpoints/
 dist/
 frontend/build/
 .vercel
-.env*
 /package-lock.json

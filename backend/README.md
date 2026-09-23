@@ -1,195 +1,218 @@
-# Emotion Monitoring — FastAPI Backend
+# Emotion Recognition Backend
 
-This is the API layer that sits between your React frontend and your
-trained `FusionEmotionModel`. It doesn't retrain or evaluate anything —
-that's what your `train.py` / `test.py` / `evaluate.py` are for. This just
-serves your already-trained model over HTTP/WebSocket so a UI (or anything
-else) can call it.
+FastAPI service for audio transcription and multimodal emotion recognition.
+The backend serves the trained fusion model used by the React frontend. It does
+not train the model.
 
-## What "backend" means here, concretely
+## Architecture
 
-- Your model can't run in a browser. Something has to load it into memory,
-  accept audio, run inference, and send back a JSON result. That "something"
-  is this FastAPI app.
-- It also handles auth (checking who's making the request) and saving
-  results (writing reports to Supabase) — the non-ML plumbing a real app needs.
-- You do **not** need any frontend code to use or test this. FastAPI gives
-  you a browsable API at `http://localhost:8000/docs` where you can upload
-  a file and see the JSON response directly.
+```text
+Audio upload or microphone
+          |
+          v
+Audio decoding and preprocessing
+          |
+          +--> Faster-Whisper -- English transcript
+          |
+          +--> Emotion2Vec Large -- voice features
+                              |
+EmoBERTa-large -------------+
+                              v
+                   Fusion classifier
+                              |
+             fused emotion + modality results
+```
 
-## Which of your files this backend actually uses
+The production fusion model uses:
 
-Copied straight from your `model.py` into `models/emotion_model.py`:
-`FusionEmotionModel` (Emotion2Vec Large via FunASR + EmoBERTa-large + RMS/intensity gated fusion).
-**If your team changes `model.py`'s architecture, update `models/emotion_model.py`
-to match** — the state_dict loaded from your checkpoint has to line up
-exactly with the class shape or `load_state_dict` will throw a size-mismatch
-error at startup.
+- **Audio:** `iic/emotion2vec_plus_large` through FunASR
+- **Text:** `tae898/emoberta-large`
+- **Speech-to-text:** Faster-Whisper, configured as `small` by default
+- **Labels:** `Neutral`, `Happy`, `Sad`, `Angry`, and `Frustrated`
 
-Your other files (`prepare_combined_dataset.py`, `dataset.py`,
-`finetune_iemocap.py`, `eval_opt.py`, `evaluate.py`) all belong to the
-**training repo**, not this backend — keep them where they are. The only thing
-that crosses over is the one checkpoint file `finetune_iemocap.py` produces:
-`outputs/models/iemocap_e2v_large_model.pt`.
+The model internally keeps `Frustrated` as a separate class. The frontend maps
+it to `Angry` when displaying charts and summaries.
 
-`model_backup.py`, `old_preprocess.py`, and `trainv1.py` are earlier
-iterations your team has since moved past — I'd move them into an
-`archive/` folder in your training repo so nobody imports the wrong one
-by accident.
+## Project Files
 
-## Setup
+| File | Purpose |
+| --- | --- |
+| `main.py` | FastAPI application, startup, health and upload routes |
+| `websocket_handler.py` | Live PCM16 WebSocket pipeline |
+| `models/emotion_model.py` | Emotion2Vec + EmoBERTa fusion model and inference |
+| `models/stt.py` | Faster-Whisper transcription |
+| `models/audio_utils.py` | WAV conversion, resampling, windows, and preprocessing |
+| `auth.py` | Supabase JWT and local development authentication |
+| `storage.py` | Optional Supabase report and audio persistence |
+| `checkpoints/` | Local model checkpoints; not committed to Git |
+
+## Requirements
+
+- Python 3.11 or newer
+- `ffmpeg` available on `PATH`
+- Approximately 2 GB for the fusion checkpoint
+- Additional disk space for Emotion2Vec, EmoBERTa, and Faster-Whisper caches
+
+Install `ffmpeg`:
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt install ffmpeg
+```
+
+## Installation
+
+From the `backend` directory:
 
 ```bash
 python -m venv venv
-source venv/bin/activate         # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
-
-# also required on your OS (for audio format conversion):
-#   Mac:    brew install ffmpeg
-#   Ubuntu: sudo apt install ffmpeg
-#   Windows: choco install ffmpeg (or download binary + add to PATH)
-
-cp .env.example .env
 ```
 
-The defaults in `.env.example` run without a checkpoint or Supabase project:
-`USE_MOCK_MODEL=true` serves randomised predictions in the real response
-shape, and `DISABLE_AUTH=true` accepts requests without a token. Both are
-announced loudly at startup and surfaced in the UI, so nobody mistakes
-placeholder output for results. Turn them off as the real pieces land.
-
-**Dependencies** (see `requirements.txt`):
-
-```
-fastapi              # web framework / routing
-uvicorn[standard]     # ASGI server that actually runs the app
-python-dotenv         # loads .env into environment variables
-pyjwt                 # verifies Supabase JWTs
-supabase              # Supabase Python client (DB + storage)
-python-multipart      # required by FastAPI for file uploads (UploadFile)
-
-openai-whisper        # speech-to-text
-pydub                 # audio format conversion (webm/opus -> wav)
-torchaudio            # audio loading/resampling to match dataset.py
-soundfile             # audio I/O backend used by torchaudio/pydub
-
-torch                 # model runtime
-transformers          # AutoModel/AutoTokenizer (EmoBERTa-large)
-funasr                # Emotion2Vec Large audio encoder
-librosa               # audio feature extraction
-sentencepiece         # tokenizer backend some HF models need
-numpy                 # array handling
-```
-
-Copy your trained checkpoint into this project:
+Copy the trained checkpoint into the backend:
 
 ```bash
 mkdir -p checkpoints
-cp /path/to/outputs/models/iemocap_e2v_large_model.pt checkpoints/fusion_model.pt
+cp /path/to/iemocap_e2v_large_model.pt checkpoints/iemocap_e2v_large_model.pt
 ```
 
-## Step 1 — verify the model works, with zero API/frontend involved
+The checkpoint path must match `FUSION_MODEL_CHECKPOINT` in `backend/.env`.
 
-```bash
-python test_model_loads.py path/to/any_test_clip.wav
+## Environment Variables
+
+Create `backend/.env`. Do not commit it.
+
+```env
+DISABLE_AUTH=true
+DEV_USER_ID=00000000-0000-0000-0000-000000000000
+USE_MOCK_MODEL=false
+
+FUSION_MODEL_CHECKPOINT=checkpoints/iemocap_e2v_large_model.pt
 ```
 
-This should print a transcript and an emotion prediction. If this fails,
-the API will fail too for the same reason — debug here first, it's much
-faster than debugging through HTTP.
+For optional Supabase persistence, also configure:
 
-## Step 2 — run the API
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-server-side-key
+SUPABASE_JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
+```
+
+Use `DISABLE_AUTH=true` only for local development. For a deployed instance,
+set it to `false` and configure Supabase authentication.
+
+## Running the Server
 
 ```bash
+source venv/bin/activate
 uvicorn main:app --reload --port 8000
 ```
 
-Open `http://localhost:8000/docs` — you can call `/api/analyze-file`
-directly from that page (upload a WAV, hit "Execute") without writing any
-frontend code at all.
+Useful URLs:
 
-## API contract
+- API documentation: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/api/health`
 
-The frontend implements the client side of all of this in
-`frontend/src/app/api/` — if you change a shape here, change it there too.
+The health response reports model state, labels, and the configured audio and
+text model names.
 
-All routes require `Authorization: Bearer <supabase_jwt>` unless
-`DISABLE_AUTH=true`.
+## API Routes
 
-**`GET /api/health`** — no auth. Reports which subsystems are actually live;
-the UI uses it to drive its status indicators.
+### `GET /api/health`
+
+Returns backend and model status. This route does not require authentication.
+
+### `POST /api/analyze-file`
+
+Accepts an audio upload as multipart form data. Supported formats depend on
+`ffmpeg`, including WAV, MP3, M4A, OGG, FLAC, and WebM.
+
+Files are decoded to 16 kHz mono audio and split into eight-second model
+windows. Each window returns a transcript and emotion result.
+
+### `WS /ws/live-session`
+
+Live sessions use raw 16 kHz mono PCM16 frames, not MediaRecorder WebM chunks.
+
+Handshake:
 
 ```json
-{"status": "ok", "model_loaded": true, "mock_mode": false,
- "auth_disabled": false, "persistence_enabled": true,
- "labels": ["Neutral", "Happy", "Sad", "Angry"]}
+{"token":"<jwt>","format":"pcm16","sampleRate":16000}
 ```
 
-**`POST /api/analyze-file`** — upload one audio file, get a timeline back.
-
-The model's input window is a fixed 8 seconds, so longer files are split into
-consecutive windows and predicted separately — otherwise a 2-minute recording
-would be truncated to its first 8 seconds and reported as the whole file.
-`emotion` is the highest-confidence window, for callers wanting one headline.
+The server replies with `ready`, processes buffered audio, and sends readings:
 
 ```json
 {
-  "transcript": "full transcript, all segments joined",
-  "emotion": { "...": "highest-confidence segment, shape below" },
-  "segments": [
-    {
-      "start": 0.0, "end": 8.0,
-      "transcript": "I can't believe you did that",
-      "emotion": {
-        "probs": {"Neutral": 0.05, "Happy": 0.02, "Sad": 0.10, "Angry": 0.73, "Frustrated": 0.10},
-        "top_label": "Angry",
-        "confidence": 0.83,
-        "modality_weights": {"audio": 0.71, "text": 0.29}
-      }
-    }
-  ],
-  "duration_secs": 42.3,
-  "report_id": "..."
+  "type": "reading",
+  "transcript": "Example text.",
+  "emotion": {
+    "top_label": "Happy",
+    "confidence": 0.82,
+    "modality_weights": {"audio": 0.61, "text": 0.39},
+    "audio_emotion": {"label": "Happy", "confidence": 0.74},
+    "text_emotion": {"label": "Neutral", "confidence": 0.58}
+  }
 }
 ```
 
-`modality_weights` is the `modality_judge` softmax — the model's learned,
-per-utterance answer to "how far do I trust the voice vs the words here?".
-Note this is a *trust weighting*, not a per-modality prediction: there's one
-classifier over the fused vector, so an audio-only emotion label isn't
-something this architecture can produce.
+Send `{"action":"end"}` to flush the final buffer and close the session.
 
-**`WS /ws/live-session`** — live streaming audio.
+### `GET /api/reports`
 
-1. First message (JSON): `{"token": "<jwt>", "format": "pcm16", "sampleRate": 16000}`
-2. Server replies `{"type": "ready", ...}` once auth passes
-3. Client streams **raw 16kHz mono PCM16** as binary frames
-4. Server sends `{"type": "reading", "transcript": "...", "emotion": {...}}`
-   every ~4 seconds of audio
-5. Client sends `{"action": "end"}`; server flushes the final partial chunk,
-   persists the session, replies `{"type": "summary", "reportId": "..."}`
+Returns saved reports when Supabase persistence is configured.
 
-> **Not MediaRecorder output.** MediaRecorder's WebM/Opus is only decodable as
-> a complete file — chunks after the first have no container header, so
-> decoding one in isolation fails. The client taps the Web Audio graph and
-> sends headerless PCM instead, which can be sliced anywhere. See
-> `frontend/src/app/api/liveSession.ts`.
+## Inference Details
 
-**`GET /api/reports`** — list a user's past sessions/reports.
+- Audio is resampled to 16 kHz mono and padded or truncated to eight seconds.
+- Live chunks use voice activity and silence checks before transcription.
+- Audio preprocessing includes gating, normalization, dynamic-range
+  compression, and high-pass filtering.
+- Faster-Whisper is forced to English and runs locally.
+- The fusion model returns a fused prediction plus audio-only and text-only
+  comparison predictions.
+- The live UI uses a five-second rolling emotion window for the current result.
 
-## Required Supabase setup (dashboard, not code)
+## Supabase Persistence
 
-1. **Table** `emotion_reports`: `id (uuid, pk, default gen_random_uuid())`,
-   `user_id (uuid, references auth.users)`, `data (jsonb)`,
-   `created_at (timestamptz, default now())`
-2. **Storage bucket** named `audio-uploads`
-3. **Row Level Security** on `emotion_reports`: `user_id = auth.uid()` for select
+Persistence is optional. If enabled, configure:
 
-## Moving to the cloud GPU later
+1. An `emotion_reports` table with `id`, `user_id`, `data`, and `created_at`.
+2. An `audio-uploads` storage bucket.
+3. Appropriate Row Level Security policies.
 
-Once you've picked a GPU host:
-- Set `DEVICE=cuda` in `.env`
-- Same code runs unchanged — `torch.load(..., map_location=device)` and
-  `.to(device)` calls already handle CPU/GPU transparently
-- Emotion2Vec Large + EmoBERTa-large are big models; make sure whatever GPU box
-  you pick has enough VRAM headroom for both plus Whisper loaded simultaneously
+Without Supabase configuration, predictions still work but reports are not
+saved or listed.
+
+## Troubleshooting
+
+### Checkpoint not found
+
+Confirm the file exists and the path is relative to `backend`:
+
+```bash
+ls -lh checkpoints/iemocap_e2v_large_model.pt
+```
+
+### `ffmpeg` not found
+
+Install `ffmpeg` and confirm it is available:
+
+```bash
+ffmpeg -version
+```
+
+### Slow transcription
+
+Use `WHISPER_MODEL_SIZE=tiny` or `base` for lower latency. `small` is more
+accurate but requires more CPU time. A CUDA-capable machine can use
+`DEVICE=cuda` if the installed PyTorch build supports it.
+
+### Mock results appear
+
+Set `USE_MOCK_MODEL=false` and confirm the checkpoint exists. The startup log
+will state whether mock mode is active.

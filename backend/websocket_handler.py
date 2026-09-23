@@ -201,7 +201,9 @@ async def handle_audio_session(websocket: WebSocket):
         pass
     finally:
         report_id = None
-        if session_readings:
+        # Only persist sessions explicitly ended by Stop & Save. Navigating
+        # away closes the socket without `action: end` and must discard it.
+        if client_ended and session_readings:
             report = {
                 "type": "live",
                 "readings": session_readings,
