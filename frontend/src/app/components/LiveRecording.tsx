@@ -307,6 +307,15 @@ export function LiveRecording() {
     setIsProcessing(false);
 
     if (emotionData.length === 0) {
+      // An empty session is discarded completely and returns to a fresh state.
+      setDuration(0);
+      setEmotionData([]);
+      windowEmotionDataRef.current = [];
+      setTranscript([]);
+      setCurrentEmotion(null);
+      startTimeRef.current = 0;
+      pausedTimeRef.current = 0;
+      pauseStartRef.current = 0;
       toast.error("No speech was analysed — nothing to save");
       return;
     }
