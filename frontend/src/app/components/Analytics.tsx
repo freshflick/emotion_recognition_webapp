@@ -180,12 +180,10 @@ export function Analytics() {
 
   return (
       <div className="p-8 bg-background min-h-full">
+        <div className="max-w-7xl mx-auto">
 
         {/* Header */}
         <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-          <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
-            — Emotion Analytics / Deep Pattern Analysis
-          </p>
           <div className="flex items-end justify-between gap-4">
             <h1
                 className="font-bold text-foreground leading-tight"
@@ -208,6 +206,9 @@ export function Analytics() {
               </SelectContent>
             </Select>
           </div>
+          <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
+            Analyze emotion distribution and trends from multimodal data
+          </p>
         </div>
 
         {/* Summary stats */}
@@ -433,6 +434,7 @@ export function Analytics() {
             </div>
           </TabsContent>
         </Tabs>
+        </div>
       </div>
   );
 }

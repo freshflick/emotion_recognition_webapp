@@ -63,7 +63,7 @@ export function Dashboard() {
     // getSessionQuote() now hits the backend (/api/quote) the first time it's
     // called each day, so it's async — fetch it in an effect rather than
     // calling it straight in useState, and render nothing in the quote slot
-    // until it resolves rather than blocking the rest of the page on it.
+    // until it resolves rather than blocking the rest of the page
     useEffect(() => {
         let cancelled = false;
         getSessionQuote().then((q) => {
@@ -90,9 +90,13 @@ export function Dashboard() {
         });
     });
 
+    // Average across sessions, so this is a clean 0..1 fraction of "how much
+    // each emotion shows up across all sessions"
+    const sessionCount = sessions.length || 1;
+
     const pieData = Object.entries(emotionDistribution).map(([emotion, value]) => ({
         name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-        value: value,
+        value: value / sessionCount,
         color: EMOTION_COLORS[emotion as Emotion],
     }));
 
@@ -123,15 +127,10 @@ export function Dashboard() {
 
     return (
         <div className="p-8 min-h-full bg-background">
+          <div className="max-w-7xl mx-auto">
 
             {/* Masthead header */}
             <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-                <p
-                    className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-3"
-                    style={{ fontFamily: sans }}
-                >
-                    — Emotion Analysis Dashboard / Published Continuously
-                </p>
                 <h1
                     className="font-bold text-foreground leading-tight mb-2"
                     style={{
@@ -144,7 +143,7 @@ export function Dashboard() {
                     <em style={{ color: "var(--primary)", fontStyle: "italic" }}>{user.name}.</em>
                 </h1>
                 <p
-                    className="text-sm text-muted-foreground max-w-md"
+                    className="text-sm text-muted-foreground max-w"
                     style={{ fontFamily: sans, fontWeight: 300, lineHeight: 1.6 }}
                 >
                     Your emotion monitoring console is live and ready. Analysis is running in real time.
@@ -152,19 +151,10 @@ export function Dashboard() {
             </div>
 
             {/* Status + quote row */}
-            <div className="flex flex-wrap items-start gap-6 mb-8">
-                <div className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-emerald-500 inline-block" />
-                    <span
-                        className="text-xs tracking-wider uppercase text-muted-foreground"
-                        style={{ fontFamily: sans }}
-                    >
-            All systems online
-          </span>
-                </div>
+            <div className="flex flex-wrap items-start mb-8">
                 {quote && (
                     <div
-                        className="flex-1 border-l pl-5 italic text-sm text-muted-foreground leading-relaxed min-w-[240px]"
+                        className="flex-1 pl-5 italic text text-muted-foreground leading-relaxed min-w-[240px]"
                         style={{ fontFamily: serif, borderColor: "var(--border)" }}
                     >
                         "{quote.text}"
@@ -315,7 +305,10 @@ export function Dashboard() {
                                         >
                                             {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                                         </Pie>
-                                        <Tooltip contentStyle={tooltipStyle} />
+                                        <Tooltip
+                                            contentStyle={tooltipStyle}
+                                            formatter={(value: number) => `${(value * 100).toFixed(0)}%`}
+                                        />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -368,6 +361,7 @@ export function Dashboard() {
                     </div>
                 </div>
             )}
+          </div>
         </div>
     );
 }

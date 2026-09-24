@@ -1,6 +1,7 @@
 import os
 import random
 import time
+from collections import Counter
 from contextlib import asynccontextmanager
 
 import httpx
@@ -24,6 +25,14 @@ from websocket_handler import handle_audio_session, run_blocking
 # Uploads larger than this are rejected before being read into memory.
 # Mirrors the "Max 50 MB" the upload UI advertises.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# Used only when the upstream quotes API is unreachable — kept short and
+# generic rather than duplicating the frontend's full quote list, since
+# this only fires in a rare "everything is degraded" case.
+FALLBACK_QUOTES = [
+    {"text": "Take a moment to reflect on how you're feeling.", "author": "Unknown"},
+    {"text": "Understanding your emotions is the first step to understanding yourself.", "author": "Unknown"},
+]
 
 # --- Quote of the day ---
 # Fetched server-side (not from the browser) specifically to sidestep the
@@ -185,10 +194,26 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
     headline = max(segments, key=lambda s: s["emotion"]["confidence"])
     full_transcript = " ".join(s["transcript"] for s in segments if s["transcript"]).strip()
 
+    # Majority vote across windows, same convention as the live path's
+    # _summarise(): Counter.most_common(1) lets the first-seen label win
+    # ties. Stored so the UI can show the same dominant emotion as the DB
+    # instead of re-deriving it with its own tie-break.
+    seg_labels = [s["emotion"]["top_label"] for s in segments]
+    seg_counts = Counter(seg_labels)
+    seg_total = len(segments)
+    summary = {
+        "dominant_label": seg_counts.most_common(1)[0][0] if seg_counts else None,
+        "label_distribution": {k: v / seg_total for k, v in seg_counts.items()} if seg_total else {},
+        "average_confidence": (
+            sum(s["emotion"]["confidence"] for s in segments) / seg_total if seg_total else 0.0
+        ),
+    }
+
     result = {
         "transcript": full_transcript,
         "emotion": headline["emotion"],
         "segments": segments,
+        "summary": summary,
         "duration_secs": round(waveform.shape[0] / audio_utils.SAMPLE_RATE, 2),
     }
 
@@ -218,6 +243,21 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
 @app.get("/api/reports")
 async def list_reports(user: dict = Depends(get_current_user)):
     return get_user_reports(user["sub"])
+
+
+@app.delete("/api/reports")
+async def delete_reports(body: dict, user: dict = Depends(get_current_user)):
+    """
+    Delete selected session reports. `body` carries {"ids": [...]}; only
+    rows owned by the caller are removed. Local-only sessions (never
+    persisted) simply match nothing server-side — the frontend drops them
+    from its own store regardless.
+    """
+    ids = body.get("ids") if isinstance(body, dict) else None
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+        raise HTTPException(status_code=400, detail="Expected JSON body {\"ids\": [...]}")
+    deleted = storage.delete_user_reports(user["sub"], ids)
+    return {"deleted": deleted}
 
 
 @app.websocket("/ws/live-session")

@@ -7,9 +7,22 @@
  * to change.
  */
 import { calculateSessionSummary, type Session } from "../utils/emotionEngine";
-import { readingsToEmotionData, segmentsToEmotionData, toEmotionData } from "./adapters";
+import { labelToEmotion, readingsToEmotionData, segmentsToEmotionData, toEmotionData } from "./adapters";
 import { getReports } from "./client";
-import type { ReportRow } from "./types";
+import type { BackendLabel, ReportRow } from "./types";
+
+/**
+ * The backend stores its own summary alongside the readings/segments.
+ * Prefer its dominant_label (mapped onto the UI's emotion set) so the UI
+ * agrees with the database even when the vote is tied — a locally
+ * recomputed tie-break can otherwise pick a different winner.
+ */
+function resolveDominant(
+  localDominant: Session["summary"]["dominantEmotion"],
+  storedLabel: BackendLabel | null | undefined,
+) {
+  return storedLabel ? labelToEmotion(storedLabel) : localDominant;
+}
 
 function rowToSession(row: ReportRow): Session | null {
   const { data } = row;
@@ -18,19 +31,23 @@ function rowToSession(row: ReportRow): Session | null {
   // Live sessions store an array of per-chunk readings.
   if (data.readings?.length) {
     const emotionData = readingsToEmotionData(data.readings);
+    const summary = calculateSessionSummary(emotionData);
+    summary.dominantEmotion = resolveDominant(summary.dominantEmotion, data.summary?.dominant_label);
     return {
       id: row.id,
       timestamp,
       duration: Math.round(data.duration_secs ?? 0),
       type: "live",
       emotionData,
-      summary: calculateSessionSummary(emotionData),
+      summary,
     };
   }
 
   // Uploads store one entry per 8-second analysis window.
   if (data.segments?.length) {
     const emotionData = segmentsToEmotionData(data.segments);
+    const summary = calculateSessionSummary(emotionData);
+    summary.dominantEmotion = resolveDominant(summary.dominantEmotion, data.summary?.dominant_label);
     return {
       id: row.id,
       timestamp,
@@ -38,7 +55,7 @@ function rowToSession(row: ReportRow): Session | null {
       type: "upload",
       filename: data.filename,
       emotionData,
-      summary: calculateSessionSummary(emotionData),
+      summary,
     };
   }
 

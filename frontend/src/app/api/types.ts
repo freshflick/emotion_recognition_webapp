@@ -48,6 +48,13 @@ export interface AnalyzeFileResponse {
   /** The real timeline — the model window is fixed at 8s, so long files
    *  are analysed as consecutive windows rather than truncated. */
   segments: AnalysisSegment[];
+  /** Majority vote across windows (first-seen wins ties) — the same value
+   *  persisted with the report. Absent on rows written before it existed. */
+  summary?: {
+    dominant_label: BackendLabel | null;
+    label_distribution: Record<string, number>;
+    average_confidence: number;
+  };
   duration_secs: number;
   report_id: string | null;
 }

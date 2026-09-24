@@ -87,3 +87,23 @@ def get_user_reports(user_id: str, limit: int = 50) -> list[dict]:
         .execute()
     )
     return result.data
+
+
+def delete_user_reports(user_id: str, report_ids: list[str]) -> int:
+    """
+    Delete the given reports, but only rows owned by this user — the
+    user_id filter is what keeps one user from deleting another's data.
+    Returns the number of rows deleted. No-op when persistence is off.
+    """
+    if not is_enabled() or not report_ids:
+        return 0
+
+    client = get_client()
+    result = (
+        client.table("emotion_reports")
+        .delete()
+        .eq("user_id", user_id)
+        .in_("id", report_ids)
+        .execute()
+    )
+    return len(result.data or [])

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
-import { Mic, Square, Play, Pause, Waves } from "lucide-react";
+import { Mic, Square, Play, Pause, Waves, Mic as MicIcon} from "lucide-react";
 import {
   LineChart,
   Line,
@@ -19,6 +19,8 @@ import { LiveSession } from "../api/liveSession";
 import { toEmotionData } from "../api/adapters";
 import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
+import { getSessions, type Session } from "../utils/emotionEngine"; // add Session + getSessions to existing import
+import {SessionDetailsDialog} from "./SessionDetailsDialog.tsx";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -80,6 +82,57 @@ function getDominantWithScore(scores: { [key in Emotion]: number }) {
   return { emotion: dominant[0], confidence: dominant[1] };
 }
 
+/* ── Recent Live Sessions Panel ── */
+function RecentLiveSessions({ onViewSession }: { onViewSession?: (session: Session) => void }) {
+  const sessions = getSessions().filter((s) => s.type === "live").slice(0, 5);
+
+  if (sessions.length === 0) return null;
+
+  return (
+      <div>
+        <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
+          Recent Live Sessions
+        </p>
+        <div className="border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          {sessions.map((session) => {
+            const dominant = session.summary.dominantEmotion;
+            return (
+                <div key={session.id} className="flex items-center gap-4 px-5 py-4">
+                  <div
+                      className="flex-shrink-0 flex items-center justify-center border"
+                      style={{ width: 40, height: 40, borderColor: "var(--border)", backgroundColor: "var(--muted)" }}
+                  >
+                    <MicIcon style={{ width: 16, height: 16, color: "var(--muted-foreground)" }} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-normal text-foreground truncate" style={{ fontFamily: sans }}>
+                      Live session · {new Date(session.timestamp).toLocaleDateString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 font-normal" style={{ fontFamily: sans }}>
+                      {Math.floor(session.duration / 60)}:{(session.duration % 60).toString().padStart(2, "0")} min
+                      &nbsp;·&nbsp;
+                      <span style={{ color: EMOTION_COLORS[dominant] }} className="capitalize">{dominant}</span>
+                    </p>
+                  </div>
+
+                  <button
+                      className="flex-shrink-0 px-3 py-1.5 border text-[11px] tracking-[0.14em] uppercase font-normal transition-colors hover:bg-muted"
+                      style={{ borderColor: "var(--border)", fontFamily: sans, color: "var(--foreground)" }}
+                      onClick={() => onViewSession?.(session)}
+                  >
+                    View
+                  </button>
+                </div>
+            );
+          })}
+          </div>
+        </div>
+      </div>
+  );
+}
+
 export function LiveRecording() {
   const navigate = useNavigate();
   const { health, isMock, refreshSessions } = useSessions();
@@ -96,6 +149,7 @@ export function LiveRecording() {
   const WINDOW_SECS = 5;
   const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const [viewedSession, setViewedSession] = useState<Session | null>(null);
 
   const sessionRef = useRef<LiveSession | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -119,7 +173,13 @@ export function LiveRecording() {
   // Releases the mic and socket if the user navigates away mid-session.
   useEffect(() => () => sessionRef.current?.teardown(), []);
 
-  useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [transcript]);
+  // Auto-follow new transcript lines while recording. Skipped when the
+  // transcript is empty so navigating to the page doesn't yank the scroll
+  // position down on mount.
+  useEffect(() => {
+    if (transcript.length === 0) return;
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [transcript]);
 
   const startRecording = async () => {
     setIsConnecting(true);
@@ -150,7 +210,7 @@ export function LiveRecording() {
         windowEmotionDataRef.current = updated;
 
         if (updated.length > 0) {
-          const avgFused = { happy: 0, sad: 0, angry: 0, neutral: 0 };
+          const avgFused = {happy: 0, sad: 0, angry: 0, neutral: 0};
           for (const r of updated) {
             for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
               avgFused[k] += r.fused[k];
@@ -308,9 +368,6 @@ export function LiveRecording() {
           <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-2" style={{ fontFamily: sans }}>
-                  — Live Session / Multimodal Emotion Analysis
-                </p>
                 <h1
                     className="font-bold text-foreground leading-tight"
                     style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
@@ -337,38 +394,6 @@ export function LiveRecording() {
                   </div>
               )}
             </div>
-
-            {/* Signal status — compact two-row layout */}
-            <div className="grid grid-cols-3 gap-x-6 gap-y-2 mt-4">
-              {[
-                  { label: "Mic", status: isActive ? "active" : isPaused ? "paused" : "ready", color: isActive ? "#b8312f" : isPaused ? "#c07c20" : "#2e7d52" },
-                  {
-                    label: "Backend",
-                    status: backendReachable ? "online" : "offline",
-                    color: backendReachable ? "#2e7d52" : "#b8312f",
-                  },
-                  {
-                    label: "Model",
-                    status: !backendReachable ? "—" : isMock ? "mock" : health?.model_loaded ? "loaded" : "—",
-                    color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : health?.model_loaded ? "#2e7d52" : "#b8312f",
-                  },
-                ].map((s) => (
-                  <div key={s.label} className="flex items-center gap-1.5">
-                    <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
-                    <span className="text-[11px] tracking-[0.1em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
-                  {s.label}
-                </span>
-                    <span className="text-[11px] tracking-widest uppercase font-semibold" style={{ color: s.color, fontFamily: sans }}>
-                  {s.status}
-                </span>
-                  </div>
-              ))}
-            </div>
-            {health?.audio_model && (
-              <p className="text-[11px] text-muted-foreground/60 mt-2" style={{ fontFamily: mono }}>
-                {health.audio_model.split("/").pop()} + {health.text_model?.split("/").pop()}
-              </p>
-            )}
           </div>
 
           {/* Results shown here are only as real as the backend serving them —
@@ -395,16 +420,16 @@ export function LiveRecording() {
           )}
 
           {/* Main layout */}
-          <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-8">
+          <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-8 items-stretch">
 
             {/* ── Recorder Control ── */}
-            <div className="space-y-6">
-              <div>
+            <div className="flex flex-col gap-6 h-full">
+              <div className="flex flex-1 flex-col">
                 <p className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>
                   Analysis Control
                 </p>
                 <div
-                    className="border"
+                    className="border flex flex-1 flex-col"
                     style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
                 >
                   {/* Color bar */}
@@ -415,7 +440,7 @@ export function LiveRecording() {
                       }}
                   />
 
-                  <div className="p-7 flex flex-col items-center gap-5">
+                  <div className="p-7 flex flex-1 flex-col items-center justify-center gap-5">
                     {/* Mic button */}
                     <div className="relative flex items-center justify-center mt-2">
                       {isActive && (
@@ -563,7 +588,7 @@ export function LiveRecording() {
                           .sort((a, b) => b[1] - a[1])
                           .map(([emotion, value]) => (
                               <div key={emotion} className="flex items-center gap-3">
-                        <span className="text-xs w-16 capitalize tracking-wide uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                        <span className="text-xs w-16 capitalize tracking-wide text-muted-foreground" style={{ fontFamily: sans }}>
                           {emotion}
                         </span>
                                 <div className="flex-1 h-1.5" style={{ backgroundColor: "var(--muted)" }}>
@@ -675,11 +700,6 @@ export function LiveRecording() {
                               <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
                             {(fusedResult.confidence * 100).toFixed(0)}% confidence
                           </span>
-                              {currentEmotion?.isMock && (
-                                  <span className="text-xs tracking-wider uppercase font-semibold" style={{ color: "#c07c20", fontFamily: sans }}>
-                              Placeholder
-                            </span>
-                              )}
                             </>
                         ) : (
                             <span className="text-sm text-muted-foreground/50 italic" style={{ fontFamily: serif }}>
@@ -765,6 +785,15 @@ export function LiveRecording() {
             </div>
           </div>
         </div>
+
+        {/* Recent live sessions — hidden while a session is actively recording */}
+        {!isRecording && (
+            <div className="max-w-7xl mx-auto px-8 pb-8">
+              <RecentLiveSessions onViewSession={setViewedSession} />
+            </div>
+        )}
+
+        <SessionDetailsDialog session={viewedSession} onClose={() => setViewedSession(null)} />
       </div>
   );
 }

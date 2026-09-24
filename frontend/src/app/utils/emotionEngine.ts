@@ -154,6 +154,18 @@ export function clearSessions() {
   notify();
 }
 
+/**
+ * Drop sessions by id (e.g. after the user deletes them in Reports).
+ * Every page reads through useSessionStore(), so one removal updates the
+ * whole app — Dashboard, Analytics, Reports, Profile — at once.
+ */
+export function removeSessions(ids: string[]) {
+  if (ids.length === 0) return;
+  const doomed = new Set(ids);
+  sessions = sessions.filter((s) => !doomed.has(s.id));
+  notify();
+}
+
 export function getSessions(): Session[] {
   return sessions;
 }
@@ -190,8 +202,11 @@ export function calculateSessionSummary(emotionData: EmotionData[]) {
     totalConfidence += data.confidence;
   });
 
+  // Ties go to the earliest emotion in canonical order (strict `>=`),
+  // matching the backend's first-max-wins convention so a just-saved
+  // session doesn't flip its headline emotion after a refresh.
   const dominantEmotion = EMOTIONS.reduce((a, b) =>
-    emotionCounts[a] > emotionCounts[b] ? a : b
+    emotionCounts[a] >= emotionCounts[b] ? a : b
   );
 
   const total = emotionData.length;
