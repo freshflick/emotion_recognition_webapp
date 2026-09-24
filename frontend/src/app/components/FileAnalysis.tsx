@@ -14,35 +14,29 @@ import {
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "./ui/dialog";
-import {
   addSession, calculateSessionSummary, getSessions,
   type EmotionData, type Emotion, type Session,
 } from "../utils/emotionEngine";
-import { segmentsToEmotionData } from "../api/adapters";
+import { labelToEmotion, segmentsToEmotionData } from "../api/adapters";
 import { analyzeFile as analyzeFileApi } from "../api/client";
 import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
+import {SessionDetailsDialog} from "./SessionDetailsDialog.tsx";
 
-const EMOTION_COLORS: { [key in Emotion]: string } = {
+export const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
   neutral: "#786c5c"
 };
-const serif = "'Playfair Display', Georgia, serif";
-const sans = "'IBM Plex Sans', system-ui, sans-serif";
-const mono = "'IBM Plex Mono', monospace";
+export const serif = "'Playfair Display', Georgia, serif";
+export const sans = "'IBM Plex Sans', system-ui, sans-serif";
+export const mono = "'IBM Plex Mono', monospace";
 
 function getDominant(scores: { [key in Emotion]: number }) {
   const entries = Object.entries(scores) as [Emotion, number][];
   return entries.reduce((a, b) => (a[1] > b[1] ? a : b));
 }
 
-function formatDuration(seconds: number) {
+export function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")} min`;
@@ -183,173 +177,6 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
   );
 }
 
-/* ── Session Details Dialog ──
-   Shown when a row in Recent Uploads is clicked. Re-derives the same
-   summary/timeline/transcript views used on the main page, but scoped to
-   whichever past session was selected rather than the in-progress one. */
-function SessionDetailsDialog({
-                                session,
-                                onClose,
-                              }: {
-  session: Session | null;
-  onClose: () => void;
-}) {
-  const tooltipStyle = {
-    background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
-    boxShadow: "none", color: "var(--card-foreground)", fontSize: 11, fontFamily: sans,
-  };
-  const axisStyle = { fontSize: 11, fill: "var(--muted-foreground)", fontFamily: sans };
-
-  if (!session) return null;
-
-  const chartData = session.emotionData.map((data) => ({
-    time: `${data.timestamp}s`,
-    happy: Number((data.fused.happy * 100).toFixed(1)),
-    sad: Number((data.fused.sad * 100).toFixed(1)),
-    angry: Number((data.fused.angry * 100).toFixed(1)),
-    neutral: Number((data.fused.neutral * 100).toFixed(1)),
-  }));
-
-  const emotionCounts = session.emotionData.reduce((acc, data) => {
-    acc[data.dominantEmotion] = (acc[data.dominantEmotion] || 0) + 1;
-    return acc;
-  }, {} as Record<Emotion, number>);
-
-  const topEmotions = Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-  return (
-      <Dialog open={!!session} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent
-            className="!max-w-[92vw] w-[92vw] rounded-none border p-0"
-            style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
-        >
-          {/* Header */}
-          <DialogHeader className="px-6 pt-6 pb-4 border-b" style={{ borderColor: "var(--border)" }}>
-            <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal mb-1.5" style={{ fontFamily: sans }}>
-              — Session Details / {session.type === "upload" ? "File Analysis" : "Live Analysis"}
-            </p>
-            <DialogTitle
-                className="font-bold text-foreground leading-tight"
-                style={{ fontFamily: serif, fontSize: "1.5rem", letterSpacing: "-0.02em" }}
-            >
-              {session.filename ?? `Session ${session.id}`}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground font-normal" style={{ fontFamily: sans }}>
-              {formatDuration(session.duration)} &middot; {new Date(session.timestamp).toLocaleString()}
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Two-column layout: stats + chart on the left, transcript on the right —
-            wide enough that nothing needs to scroll to be seen. */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] divide-y lg:divide-y-0 lg:divide-x" style={{ borderColor: "var(--border)" }}>
-            {/* Left: summary, top emotions, timeline */}
-            <div className="px-6 py-6 space-y-6">
-              {/* Summary */}
-              <div>
-                <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
-                  Summary
-                </p>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="border-l-2 pl-4 py-1" style={{ borderColor: EMOTION_COLORS[session.summary.dominantEmotion] }}>
-                    <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 font-normal" style={{ fontFamily: sans }}>
-                      Dominant Emotion
-                    </p>
-                    <div className="text-2xl font-bold capitalize" style={{ fontFamily: serif, color: EMOTION_COLORS[session.summary.dominantEmotion] }}>
-                      {session.summary.dominantEmotion}
-                    </div>
-                  </div>
-                  <div className="border-l-2 pl-4 py-1" style={{ borderColor: "var(--border)" }}>
-                    <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 font-normal" style={{ fontFamily: sans }}>
-                      Avg Confidence
-                    </p>
-                    <div className="text-2xl font-bold" style={{ fontFamily: serif }}>
-                      {(session.summary.averageConfidence * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                  <div className="border-l-2 pl-4 py-1" style={{ borderColor: "var(--border)" }}>
-                    <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 font-normal" style={{ fontFamily: sans }}>
-                      Data Points
-                    </p>
-                    <div className="text-2xl font-bold" style={{ fontFamily: serif }}>
-                      {session.emotionData.length}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Top emotions */}
-              {topEmotions.length > 0 && (
-                  <div className="grid grid-cols-3 gap-4">
-                    {topEmotions.map(([emotion, count]) => (
-                        <div key={emotion} className="border-l-2 pl-4 py-1" style={{ borderColor: EMOTION_COLORS[emotion as Emotion] }}>
-                          <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 capitalize font-normal" style={{ fontFamily: sans }}>
-                            {emotion}
-                          </p>
-                          <div className="text-xl font-bold" style={{ fontFamily: serif, color: EMOTION_COLORS[emotion as Emotion] }}>
-                            {count}×
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-normal" style={{ fontFamily: sans }}>occurrences</p>
-                        </div>
-                    ))}
-                  </div>
-              )}
-
-              {/* Timeline */}
-              {chartData.length > 0 && (
-                  <div>
-                    <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
-                      Emotion Timeline
-                    </p>
-                    <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)" }}>
-                      <ResponsiveContainer width="100%" height={260}>
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
-                          <XAxis dataKey="time" tick={axisStyle} />
-                          <YAxis tick={axisStyle} />
-                          <Tooltip contentStyle={tooltipStyle} />
-                          <Legend wrapperStyle={{ fontSize: 11, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }} />
-                          {(Object.keys(EMOTION_COLORS) as Emotion[]).map((e) => (
-                              <Line key={e} type="monotone" dataKey={e} stroke={EMOTION_COLORS[e]} strokeWidth={1.5} dot={false} />
-                          ))}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-              )}
-            </div>
-
-            {/* Right: transcript, full height, no inner scroll container */}
-            {session.emotionData.some((d) => d.transcript) && (
-                <div className="px-6 py-6">
-                  <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
-                    Transcript
-                  </p>
-                  <div className="border p-4 space-y-2" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)" }}>
-                    {session.emotionData.map((data, index) => (
-                        <div key={index} className="flex items-start gap-3 text-sm border-b py-2 last:border-b-0" style={{ borderColor: "var(--border)" }}>
-                    <span className="text-[11px] text-muted-foreground/50 tabular-nums w-8 flex-shrink-0 pt-0.5 font-normal" style={{ fontFamily: mono }}>
-                      [{data.timestamp}s]
-                    </span>
-                          <span
-                              className="text-[11px] px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-normal"
-                              style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[data.dominantEmotion], fontFamily: sans }}
-                          >
-                      {data.dominantEmotion}
-                    </span>
-                          <span className="text-sm text-foreground font-normal" style={{ fontFamily: sans }}>
-                      {data.transcript}
-                    </span>
-                        </div>
-                    ))}
-                  </div>
-                </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-  );
-}
-
 /* ── Recent Uploads Panel ── */
 function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) => void }) {
   const sessions = getSessions().filter((s) => s.type === "upload").slice(0, 5);
@@ -357,17 +184,11 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
   if (sessions.length === 0) return null;
 
   return (
-      <div className="border" style={{ borderColor: "var(--border)" }}>
-        {/* Header */}
-        <div className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-        <span
-            className="text-[11px] tracking-[0.22em] uppercase text-foreground font-normal"
-            style={{ fontFamily: sans }}
-        >
+      <div>
+        <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
           Recent Uploads
-        </span>
-        </div>
-
+        </p>
+        <div className="border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
         {/* List */}
         <div className="divide-y" style={{ borderColor: "var(--border)" }}>
           {sessions.map((session, i) => {
@@ -424,6 +245,7 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
                 </div>
             );
           })}
+          </div>
         </div>
       </div>
   );
@@ -493,6 +315,13 @@ export function FileAnalysis() {
       setProgress(100);
       setAnalysisComplete(true);
 
+      // Prefer the backend's stored dominant so the just-saved session
+      // agrees with the DB immediately, not only after a refresh.
+      const summary = calculateSessionSummary(data);
+      if (result.summary?.dominant_label) {
+        summary.dominantEmotion = labelToEmotion(result.summary.dominant_label);
+      }
+
       addSession({
         id: result.report_id ?? `local-${Date.now()}`,
         timestamp: Date.now(),
@@ -500,7 +329,7 @@ export function FileAnalysis() {
         type: "upload",
         filename: selectedFile.name,
         emotionData: data,
-        summary: calculateSessionSummary(data),
+        summary,
       });
 
       if (result.report_id) {
@@ -535,13 +364,10 @@ export function FileAnalysis() {
 
   return (
       <div className="p-8 bg-background min-h-full">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-7xl mx-auto">
 
           {/* Header */}
           <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-            <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal mb-2" style={{ fontFamily: sans }}>
-              — FILE ANALYSIS / AUDIO UPLOAD
-            </p>
             <h1
                 className="font-bold text-foreground leading-tight"
                 style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
@@ -549,42 +375,9 @@ export function FileAnalysis() {
               Audio File{" "}
               <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Analysis</em>
             </h1>
-            <p className="text-xs text-muted-foreground mt-1.5 font-normal" style={{ fontFamily: sans }}>
+            <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
               Upload audio recordings for comprehensive multimodal emotion analysis.
             </p>
-          </div>
-
-          {/* ML Signal status — driven by the real backend, via /api/health */}
-          <div className="flex flex-wrap gap-4 mb-8">
-            {[
-              {
-                label: "Backend",
-                status: backendReachable ? "connected" : "offline",
-                color: backendReachable ? "#2e7d52" : "#b8312f",
-              },
-              {
-                label: "Speech Encoder",
-                status: !backendReachable ? "offline" : isMock ? "mock" : isProcessing ? "active" : "standby",
-                color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : isProcessing ? "#2e7d52" : "var(--muted-foreground)",
-              },
-              {
-                label: "Fusion Model",
-                status: !backendReachable ? "offline" : isMock ? "mock" : analysisComplete ? "done" : isProcessing ? "running" : health?.model_loaded ? "loaded" : "no checkpoint",
-                color: !backendReachable ? "#b8312f" : isMock ? "#c07c20" : analysisComplete ? "#2e7d52" : isProcessing ? "#1e5f8a" : health?.model_loaded ? "#2e7d52" : "#b8312f",
-              },
-              ...(health?.audio_model ? [{ label: "Audio Model", status: health.audio_model.split("/").pop() ?? health.audio_model, color: "var(--muted-foreground)" }] : []),
-              ...(health?.text_model ? [{ label: "Text Model", status: health.text_model.split("/").pop() ?? health.text_model, color: "var(--muted-foreground)" }] : []),
-            ].map((s) => (
-                <div key={s.label} className="flex items-center gap-2">
-                  <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
-                  <span className="text-[11px] tracking-widest uppercase text-muted-foreground font-normal" style={{ fontFamily: sans }}>
-                {s.label}
-              </span>
-                  <span className="text-[11px] tracking-widest uppercase font-normal" style={{ color: s.color, fontFamily: sans }}>
-                {s.status}
-              </span>
-                </div>
-            ))}
           </div>
 
           {!backendReachable && (
@@ -704,7 +497,7 @@ export function FileAnalysis() {
                         .slice(0, 3)
                         .map(([emotion, count]) => (
                             <div key={emotion} className="border-l-2 pl-4 py-1" style={{ borderColor: EMOTION_COLORS[emotion as Emotion] }}>
-                              <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 capitalize font-normal" style={{ fontFamily: sans }}>
+                              <p className="text-[11px] tracking-widest uppercase text-muted-foreground mb-1 font-normal" style={{ fontFamily: sans }}>
                                 {emotion}
                               </p>
                               <div className="text-2xl font-bold" style={{ fontFamily: serif, color: EMOTION_COLORS[emotion as Emotion] }}>

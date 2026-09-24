@@ -40,54 +40,14 @@ export function updateUser(updates: Partial<UserProfile>): UserProfile {
   return updated;
 }
 
-// Motivational quotes
-//
-// This list is now only a fallback — getSessionQuote() below fetches a real
-// quote from getQuote() (backend's /api/quote, which itself proxies a free
-// public quotes API) and only falls back to picking from here if that
-// request fails, so the dashboard never ends up with no quote at all.
-const MOTIVATIONAL_QUOTES = [
-  {
-    text: "Your emotions are the slaves to your thoughts, and you are the slave to your emotions.",
-    author: "Elizabeth Gilbert",
-  },
-  {
-    text: "The best way to capture moments is to pay attention. This is how we cultivate mindfulness.",
-    author: "Jon Kabat-Zinn",
-  },
-  {
-    text: "Feelings are just visitors. Let them come and go.",
-    author: "Mooji",
-  },
-  {
-    text: "Emotion can be the enemy, if you give into your emotion, you lose yourself.",
-    author: "Mike Tyson",
-  },
-  {
-    text: "Understanding your emotions is the key to understanding yourself.",
-    author: "Unknown",
-  },
-  {
-    text: "One of the most courageous decisions you'll ever make is to finally let go of what is hurting your heart and soul.",
-    author: "Brigitte Nicole",
-  },
-  {
-    text: "The emotion that can break your heart is sometimes the very one that heals it.",
-    author: "Nicholas Sparks",
-  },
-  {
-    text: "Mastering others is strength. Mastering yourself is true power.",
-    author: "Lao Tzu",
-  },
-  {
-    text: "Your mind is a powerful thing. When you fill it with positive thoughts, your life will start to change.",
-    author: "Unknown",
-  },
-  {
-    text: "Be gentle with yourself. You're doing the best you can.",
-    author: "Unknown",
-  },
-];
+// A single generic fallback for the rare case the backend itself is
+// unreachable (network down, backend crashed) — the backend already has
+// its own fallback for when the upstream quotes API specifically fails,
+// so this only ever shows when things are more broadly degraded.
+const OFFLINE_FALLBACK_QUOTE = {
+  text: "Take a moment to reflect on how you're feeling.",
+  author: "",
+};
 
 const QUOTE_STORAGE_KEY = "emotionmonitor_session_quote";
 
@@ -120,7 +80,7 @@ export async function getSessionQuote(): Promise<{ text: string; author: string 
     // already tries its own fallback list first, so reaching here means
     // both that and the request itself failed. Fall back locally rather
     // than leaving the dashboard with nothing.
-    quote = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+    quote = OFFLINE_FALLBACK_QUOTE
   }
 
   localStorage.setItem(

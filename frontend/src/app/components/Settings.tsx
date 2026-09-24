@@ -194,19 +194,16 @@ export function Settings() {
 
   return (
       <div className="p-8 bg-background min-h-full">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-            <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
-              — Account Settings / Preferences
-            </p>
             <h1
                 className="font-bold text-foreground leading-tight"
                 style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
             >
               Account <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Settings</em>
             </h1>
-            <p className="text-xs text-muted-foreground font-normal mt-1.5" style={{ fontFamily: sans }}>
+            <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
               Manage your account preferences and application settings.
             </p>
           </div>

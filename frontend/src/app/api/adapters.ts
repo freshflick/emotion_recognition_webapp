@@ -23,6 +23,11 @@ const LABEL_TO_EMOTION: Record<BackendLabel, Emotion> = {
   Frustrated: "angry",
 };
 
+/** Map one backend label onto the UI's emotion key. */
+export function labelToEmotion(label: BackendLabel): Emotion {
+  return LABEL_TO_EMOTION[label] ?? "neutral";
+}
+
 function emptyScores(): Record<Emotion, number> {
   return { happy: 0, sad: 0, angry: 0, neutral: 0 };
 }

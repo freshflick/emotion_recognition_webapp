@@ -1,14 +1,22 @@
 import { useState } from "react";
-import { Download, FileText, X, CheckSquare, Square } from "lucide-react";
-import {
-  BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-} from "recharts";
+import { Download, FileText, X, CheckSquare, Square, Trash2, Loader2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { useSessionStore, type Emotion } from "../utils/emotionEngine";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./ui/alert-dialog";
+import { removeSessions, useSessionStore, type Emotion } from "../utils/emotionEngine";
+import { deleteReports } from "../api/client";
 import { toast } from "sonner";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
@@ -25,6 +33,7 @@ export function Reports() {
   const [endDate, setEndDate] = useState<string>("");
   const [appliedRange, setAppliedRange] = useState<{ start: string; end: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const sessions = useSessionStore();
 
@@ -115,6 +124,30 @@ export function Reports() {
     );
   };
 
+  // Delete the selected sessions everywhere: persisted rows go through the
+  // backend, then the ids are dropped from the shared store so Dashboard,
+  // Analytics, Profile and the analysis pages update immediately.
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0 || isDeleting) return;
+    setIsDeleting(true);
+    const ids = [...selectedIds];
+    try {
+      await deleteReports(ids);
+    } catch (err) {
+      // Still drop them locally so the UI stays usable offline — but warn
+      // that persisted rows may reappear on the next reload.
+      toast.warning(
+        err instanceof Error
+          ? `Server delete failed (${err.message}) — removed locally, may reappear on reload`
+          : "Server delete failed — removed locally, may reappear on reload",
+      );
+    }
+    removeSessions(ids);
+    setSelectedIds([]);
+    setIsDeleting(false);
+    toast.success(`Deleted ${ids.length} session${ids.length === 1 ? "" : "s"}`);
+  };
+
   // Target sessions for export: if items are checked, export checked items; otherwise export all filtered
   const targetExportSessions = isSomeSelected
       ? filteredSessions.filter((s) => selectedIds.includes(s.id))
@@ -135,26 +168,6 @@ export function Reports() {
   filteredSessions.forEach((session) => {
     emotionCounts[session.summary.dominantEmotion]++;
   });
-
-  const pieData = Object.entries(emotionCounts).map(([emotion, count]) => ({
-    name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-    value: count,
-    color: EMOTION_COLORS[emotion as Emotion],
-  }));
-
-  const dailyData: { [date: string]: { sessions: number; avgConfidence: number } } = {};
-  filteredSessions.forEach((session) => {
-    const date = new Date(session.timestamp).toLocaleDateString();
-    if (!dailyData[date]) dailyData[date] = { sessions: 0, avgConfidence: 0 };
-    dailyData[date].sessions++;
-    dailyData[date].avgConfidence += session.summary.averageConfidence;
-  });
-
-  const dailyChartData = Object.entries(dailyData).map(([date, data]) => ({
-    date: date.split("/").slice(0, 2).join("/"),
-    sessions: data.sessions,
-    confidence: Number(((data.avgConfidence / data.sessions) * 100).toFixed(1)),
-  }));
 
   // Generate PDF Report
   const generatePDFReport = () => {
@@ -222,21 +235,12 @@ export function Reports() {
     toast.success(`Exported ${targetExportSessions.length} session(s) to CSV`);
   };
 
-  const tooltipStyle = {
-    background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
-    boxShadow: "none", color: "var(--card-foreground)", fontSize: 11, fontFamily: sans,
-  };
-  const axisStyle = { fontSize: 11, fill: "var(--muted-foreground)", fontFamily: sans };
-
   return (
       <div className="p-8 bg-background min-h-full">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
 
           {/* Header */}
           <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-            <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal mb-2" style={{ fontFamily: sans }}>
-              — REPORTS & ANALYTICS / PUBLISHED ON DEMAND
-            </p>
             <div className="flex items-end justify-between gap-4">
               <h1
                   className="font-bold text-foreground leading-tight"
@@ -269,6 +273,9 @@ export function Reports() {
                 </Button>
               </div>
             </div>
+            <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
+              Generate detailed emotion analysis reports from multimodal data
+            </p>
           </div>
 
           {/* Date Range Component Box */}
@@ -375,55 +382,7 @@ export function Reports() {
                       </div>
                   ))}
                 </div>
-
-                {/* Visualizations Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                  {/* Emotion Breakdown Pie Chart */}
-                  <div className="border p-6" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-                    <p className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground font-normal mb-4" style={{ fontFamily: sans }}>
-                      Emotion Distribution
-                    </p>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <PieChart>
-                        <Pie
-                            data={pieData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={85}
-                            innerRadius={50}
-                            paddingAngle={2}
-                        >
-                          {pieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip contentStyle={tooltipStyle} />
-                        <Legend wrapperStyle={{ fontSize: 11, fontFamily: sans, textTransform: "uppercase" }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Activity & Confidence Bar Chart */}
-                  <div className="border p-6" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
-                    <p className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground font-normal mb-4" style={{ fontFamily: sans }}>
-                      Confidence & Activity Trend
-                    </p>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={dailyChartData}>
-                        <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
-                        <XAxis dataKey="date" tick={axisStyle} />
-                        <YAxis tick={axisStyle} />
-                        <Tooltip contentStyle={tooltipStyle} />
-                        <Legend wrapperStyle={{ fontSize: 11, fontFamily: sans, textTransform: "uppercase" }} />
-                        <Bar dataKey="confidence" name="Avg Confidence (%)" fill="var(--foreground)" />
-                        <Bar dataKey="sessions" name="Sessions" fill="var(--muted-foreground)" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
+                
                 {/* Session Table */}
                 <div className="border mb-8" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                   <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
@@ -436,7 +395,8 @@ export function Reports() {
                   )}
                 </span>
 
-                    {/* Quick Select All Button */}
+                    {/* Select + Delete actions */}
+                    <div className="flex items-center gap-2">
                     <Button
                         variant="outline"
                         size="sm"
@@ -454,6 +414,58 @@ export function Reports() {
                           </>
                       )}
                     </Button>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!isSomeSelected || isDeleting}
+                            className="rounded-none border text-[10px] tracking-[0.14em] uppercase font-normal h-7 px-3 gap-1.5 disabled:opacity-40"
+                            style={{ fontFamily: sans, borderColor: "var(--border)", color: "#b8312f" }}
+                        >
+                          {isDeleting ? (
+                              <>
+                                <Loader2 className="size-3 animate-spin" /> Deleting…
+                              </>
+                          ) : (
+                              <>
+                                <Trash2 className="size-3" /> Delete{isSomeSelected ? ` (${selectedIds.length})` : ""}
+                              </>
+                          )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent
+                          className="rounded-none border"
+                          style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+                      >
+                        <AlertDialogHeader>
+                          <AlertDialogTitle style={{ fontFamily: serif }}>
+                            Delete {selectedIds.length} session{selectedIds.length === 1 ? "" : "s"}?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription style={{ fontFamily: sans }}>
+                            This permanently removes the selected sessions from the database
+                            and every page in the app. This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel
+                              className="rounded-none border"
+                              style={{ fontFamily: sans, borderColor: "var(--border)" }}
+                          >
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                              onClick={handleDeleteSelected}
+                              className="rounded-none text-[11px] tracking-[0.12em] uppercase font-normal"
+                              style={{ fontFamily: sans, backgroundColor: "#b8312f", color: "#fff" }}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">

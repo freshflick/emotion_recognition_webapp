@@ -103,6 +103,16 @@ export function getReports(): Promise<ReportRow[]> {
   return request<ReportRow[]>("/api/reports");
 }
 
+/** Delete persisted session reports by id. Local-only sessions simply
+ *  match nothing server-side; the caller drops them from the store anyway. */
+export function deleteReports(ids: string[]): Promise<{ deleted: number }> {
+  return request<{ deleted: number }>("/api/reports", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+}
+
 /**
  * Warn (loudly, once) if the backend's label set has drifted from what the
  * UI adapter expects — e.g. someone retrains as 6-class and the frontend is
