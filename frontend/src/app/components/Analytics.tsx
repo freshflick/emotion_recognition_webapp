@@ -263,10 +263,10 @@ export function Analytics() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ChartShell title="Emotion Count by Type">
                 <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={barChartData}>
-                    <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                  <BarChart data={barChartData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                    <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                     <XAxis dataKey="emotion" tick={axisStyle} />
-                    <YAxis tick={axisStyle} />
+                    <YAxis allowDecimals={false} tick={axisStyle} />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Bar dataKey="count" radius={0}>
                       {barChartData.map((entry, index) => (
@@ -278,14 +278,17 @@ export function Analytics() {
               </ChartShell>
               <ChartShell title="Emotion Distribution">
                 <ResponsiveContainer width="100%" height={320}>
-                  <PieChart>
-                    <Pie data={pieChartData} cx="50%" cy="50%" labelLine={false}
-                         label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                         outerRadius={110} dataKey="value">
+                  <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
+                    <Pie data={pieChartData} cx="50%" cy="46%" innerRadius={68} outerRadius={105} paddingAngle={2} dataKey="value">
                       {pieChartData.map((entry, index) => (
                           <Cell key={`pie-cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
+                    <Legend
+                        verticalAlign="bottom"
+                        iconType="circle"
+                        wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted-foreground)" }}
+                    />
                     <Tooltip contentStyle={tooltipStyle} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -293,12 +296,12 @@ export function Analytics() {
             </div>
             <ChartShell title="Daily Emotion Breakdown">
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={dailyChartData}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                <BarChart data={dailyChartData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                   <XAxis dataKey="date" tick={axisStyle} />
-                  <YAxis tick={axisStyle} />
+                  <YAxis allowDecimals={false} tick={axisStyle} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={legendStyle} />
+                  <Legend verticalAlign="bottom" wrapperStyle={legendStyle} />
                   <Bar name="happy" dataKey="happy" stackId="a" fill={EMOTION_COLORS.happy} />
                   <Bar name="sad" dataKey="sad" stackId="a" fill={EMOTION_COLORS.sad} />
                   <Bar name="angry" dataKey="angry" stackId="a" fill={EMOTION_COLORS.angry} />
@@ -311,12 +314,12 @@ export function Analytics() {
           <TabsContent value="trends" className="space-y-6 mt-6">
             <ChartShell title="Emotion Timeline — Area View">
               <ResponsiveContainer width="100%" height={360}>
-                <AreaChart data={timelineData}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                <AreaChart data={timelineData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                   <XAxis dataKey="session" tick={axisStyle} />
-                  <YAxis tick={axisStyle} />
+                  <YAxis domain={[0, 100]} tick={axisStyle} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={legendStyle} />
+                  <Legend verticalAlign="bottom" wrapperStyle={legendStyle} />
                   <Area name="happy" type="monotone" dataKey="happy" stackId="1" stroke={EMOTION_COLORS.happy} fill={EMOTION_COLORS.happy} fillOpacity={0.5} />
                   <Area name="sad" type="monotone" dataKey="sad" stackId="1" stroke={EMOTION_COLORS.sad} fill={EMOTION_COLORS.sad} fillOpacity={0.5} />
                   <Area name="angry" type="monotone" dataKey="angry" stackId="1" stroke={EMOTION_COLORS.angry} fill={EMOTION_COLORS.angry} fillOpacity={0.5} />
@@ -326,12 +329,12 @@ export function Analytics() {
             </ChartShell>
             <ChartShell title="Emotion Trends — Line View">
               <ResponsiveContainer width="100%" height={360}>
-                <LineChart data={timelineData}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                <LineChart data={timelineData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                   <XAxis dataKey="session" tick={axisStyle} />
-                  <YAxis tick={axisStyle} />
+                  <YAxis domain={[0, 100]} tick={axisStyle} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={legendStyle} />
+                  <Legend verticalAlign="bottom" wrapperStyle={legendStyle} />
                   <Line name="happy" type="monotone" dataKey="happy" stroke={EMOTION_COLORS.happy} strokeWidth={1.5} dot={false} />
                   <Line name="sad" type="monotone" dataKey="sad" stroke={EMOTION_COLORS.sad} strokeWidth={1.5} dot={false} />
                   <Line name="angry" type="monotone" dataKey="angry" stroke={EMOTION_COLORS.angry} strokeWidth={1.5} dot={false} />
@@ -350,7 +353,6 @@ export function Analytics() {
                   <PolarRadiusAxis angle={90} domain={[0, 100]} tick={axisStyle} />
                   <Radar name="Intensity" dataKey="value" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.3} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={legendStyle} />
                 </RadarChart>
               </ResponsiveContainer>
             </ChartShell>
@@ -384,16 +386,21 @@ export function Analytics() {
                   ];
                   return (
                       <ResponsiveContainer width="100%" height={280}>
-                        <PieChart>
-                          <Pie data={comparisonData} cx="50%" cy="50%" labelLine={false}
-                               label={({ name, value }) => total > 0 && value / total > 0.05 ? `${name}: ${((value / total) * 100).toFixed(0)}%` : ''}
-                               outerRadius={100} dataKey="value">
+                        <BarChart
+                            data={comparisonData}
+                            layout="vertical"
+                            margin={{ top: 8, right: 24, bottom: 8, left: 12 }}
+                        >
+                          <CartesianGrid horizontal={false} strokeDasharray="2 2" stroke="var(--border)" />
+                          <XAxis type="number" allowDecimals={false} domain={[0, Math.max(total, 1)]} tick={axisStyle} />
+                          <YAxis type="category" dataKey="name" width={64} tick={axisStyle} />
+                          <Tooltip contentStyle={tooltipStyle} />
+                          <Bar dataKey="value" name="Sessions" radius={0}>
                             {comparisonData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
-                          </Pie>
-                          <Tooltip contentStyle={tooltipStyle} />
-                        </PieChart>
+                          </Bar>
+                        </BarChart>
                       </ResponsiveContainer>
                   );
                 })()}

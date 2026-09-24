@@ -73,7 +73,7 @@ async def process_chunk(
     # VAD: skip chunks with no speech (saves ~1-2s per silent chunk)
     rms = float(waveform.pow(2).mean().sqrt())
     if rms < 0.005:
-        return {"transcript": "", "emotion": emotion_model.predict(waveform, ""), "timestamp": time.time(), "silent": True}
+        return {"transcript": "", "emotion": None, "timestamp": time.time(), "silent": True}
 
     # Noise gate: zero out samples below threshold to reduce background noise
     waveform = audio_utils.noise_gate(waveform, threshold=0.01)
@@ -160,6 +160,11 @@ async def handle_audio_session(websocket: WebSocket):
         except Exception as e:
             # One bad chunk shouldn't take down the whole session.
             await websocket.send_json({"type": "error", "message": str(e)})
+            return
+
+        # Silent chunks must not become fake readings. Otherwise the frontend
+        # shows a random-looking emotion even though no speech was analysed.
+        if reading.get("silent"):
             return
 
         session_readings.append(reading)

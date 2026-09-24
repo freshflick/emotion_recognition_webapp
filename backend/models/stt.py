@@ -98,7 +98,11 @@ def transcribe(audio_bytes: bytes) -> str:
             no_speech_threshold=0.6,
             log_prob_threshold=-1.0,
             suppress_blank=True,
-            initial_prompt=".",
+            vad_filter=True,
+            vad_parameters={
+                "min_silence_duration_ms": 450,
+                "speech_pad_ms": 180,
+            },
         )
         text = " ".join(seg.text.strip() for seg in segments).strip()
 

@@ -27,7 +27,7 @@ The production fusion model uses:
 
 - **Audio:** `iic/emotion2vec_plus_large` through FunASR
 - **Text:** `tae898/emoberta-large`
-- **Speech-to-text:** Faster-Whisper, configured as `small` by default
+- **Speech-to-text:** Faster-Whisper, configured as `small.en` by default
 - **Labels:** `Neutral`, `Happy`, `Sad`, `Angry`, and `Frustrated`
 
 The model internally keeps `Frustrated` as a separate class. The frontend maps
@@ -169,7 +169,8 @@ Returns saved reports when Supabase persistence is configured.
 ## Inference Details
 
 - Audio is resampled to 16 kHz mono and padded or truncated to eight seconds.
-- Live chunks use voice activity and silence checks before transcription.
+- Live chunks use voice activity and silence checks before transcription, and
+  Faster-Whisper applies its built-in VAD to reduce pause hallucinations.
 - Audio preprocessing includes gating, normalization, dynamic-range
   compression, and high-pass filtering.
 - Faster-Whisper is forced to English and runs locally.
@@ -208,8 +209,8 @@ ffmpeg -version
 
 ### Slow transcription
 
-Use `WHISPER_MODEL_SIZE=tiny` or `base` for lower latency. `small` is more
-accurate but requires more CPU time. A CUDA-capable machine can use
+Use `WHISPER_MODEL_SIZE=tiny.en` or `base.en` for lower latency. `small.en` is
+more accurate but requires more CPU time. A CUDA-capable machine can use
 `DEVICE=cuda` if the installed PyTorch build supports it.
 
 ### Mock results appear

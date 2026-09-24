@@ -45,7 +45,7 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Whisper (speech-to-text, feeds the text branch of your fusion model) ---
-WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")  # tiny/base/small/medium
+WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small.en")  # tiny.en/base.en/small.en/medium.en
 
 # --- Your trained fusion model ---
 # Path to the checkpoint train.py saves (outputs/models/fusion_model.pt).

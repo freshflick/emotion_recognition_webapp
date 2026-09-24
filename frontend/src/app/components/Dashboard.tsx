@@ -94,7 +94,7 @@ export function Dashboard() {
     // each emotion shows up across all sessions"
     const sessionCount = sessions.length || 1;
 
-    const pieData = Object.entries(emotionDistribution).map(([emotion, value]) => ({
+    const pieData = Object.entries(emotionDistribution).filter(([, value]) => value > 0).map(([emotion, value]) => ({
         name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
         value: value / sessionCount,
         color: EMOTION_COLORS[emotion as Emotion],
@@ -293,18 +293,21 @@ export function Dashboard() {
                             </p>
                             <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                                 <ResponsiveContainer width="100%" height={240}>
-                                    <PieChart>
+                                    <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
                                         <Pie
                                             data={pieData}
                                             cx="50%"
                                             cy="50%"
-                                            labelLine={false}
-                                            label={({ name, percent }) => percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
-                                            outerRadius={85}
+                                            outerRadius={80}
                                             dataKey="value"
                                         >
                                             {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                                         </Pie>
+                                        <Legend
+                                            verticalAlign="bottom"
+                                            iconType="circle"
+                                            wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted-foreground)" }}
+                                        />
                                         <Tooltip
                                             contentStyle={tooltipStyle}
                                             formatter={(value: number) => `${(value * 100).toFixed(0)}%`}
@@ -324,10 +327,10 @@ export function Dashboard() {
                             </p>
                             <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                                 <ResponsiveContainer width="100%" height={240}>
-                                    <BarChart data={timelineData} margin={{ left: -20 }}>
-                                        <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                                    <BarChart data={timelineData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                                        <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                                         <XAxis dataKey="name" tick={axisStyle} />
-                                        <YAxis tick={axisStyle} />
+                                        <YAxis domain={[0, 100]} tick={axisStyle} />
                                         <Tooltip contentStyle={tooltipStyle} />
                                         <Bar dataKey="confidence" fill="var(--primary)" radius={0} />
                                     </BarChart>
@@ -345,10 +348,10 @@ export function Dashboard() {
                             </p>
                             <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                                 <ResponsiveContainer width="100%" height={240}>
-                                    <LineChart data={trendData} margin={{ left: -20 }}>
-                                        <CartesianGrid strokeDasharray="2 2" stroke="var(--border)" />
+                                    <LineChart data={trendData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                                        <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                                         <XAxis dataKey="name" tick={axisStyle} />
-                                        <YAxis tick={axisStyle} />
+                                        <YAxis domain={[0, 100]} tick={axisStyle} />
                                         <Tooltip contentStyle={tooltipStyle} />
                                         <Legend wrapperStyle={{ fontSize: 11, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted-foreground)" }} />
                                         {(["happy", "sad", "angry", "neutral"] as Emotion[]).map((e) => (

@@ -101,11 +101,12 @@ export function Root() {
                 </div>
 
                 {!collapsed && (
-                    <div className="px-6 pb-2">
-                        <p className="text-xs text-muted-foreground tracking-wider uppercase font-medium">
-                            Fusion Model · Powered Analysis
+                    <div className="pb-0">
+                        <p className="px-6 py-3 text-xs text-muted-foreground tracking-[0.08em] uppercase font-semibold leading-4">
+                            <span className="block">Fusion Model ·</span>
+                            <span className="block">Powered Analysis</span>
                         </p>
-                        <div className="mt-4 pt-3 border-t flex items-center justify-between text-[11px] text-muted-foreground font-mono" style={{ borderColor: "var(--sidebar-border)" }}>
+                        <div className="border-y px-6 py-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono" style={{ borderColor: "var(--sidebar-border)" }}>
                             <span className="flex items-center gap-1.5 font-medium">
                                 <Clock className="size-3 text-primary" />
                                 {formattedTime}
@@ -116,7 +117,9 @@ export function Root() {
                 )}
 
                 {/* Navigation */}
-                <nav className="flex-1 px-2 py-6 space-y-1 overflow-y-auto">
+                <nav
+                    className="flex-1 px-2 pt-5 pb-6 space-y-1 overflow-y-auto"
+                >
                     {NAV_ITEMS.map((item) => {
                         const Icon = item.icon;
                         const active = isActive(item.path);

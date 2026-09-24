@@ -141,6 +141,28 @@
   .font-mono { font-family: 'IBM Plex Mono', monospace; }
 }
 
+/* Recharts defaults to a white pie-sector outline and dark tooltip text.
+   Override those defaults so charts remain readable in both themes. */
+.recharts-default-tooltip {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--card-foreground) !important;
+  box-shadow: none !important;
+}
+
+.recharts-default-tooltip .recharts-tooltip-label,
+.recharts-default-tooltip .recharts-tooltip-item,
+.recharts-default-tooltip .recharts-tooltip-item-name,
+.recharts-default-tooltip .recharts-tooltip-item-value,
+.recharts-default-tooltip .recharts-tooltip-item-separator {
+  color: var(--card-foreground) !important;
+}
+
+.recharts-sector {
+  stroke: var(--card);
+  stroke-width: 1px;
+}
+
 /* ══════════════════════════════════════════════════════
    FULL PALETTE THEMES  (Supabase-inspired)
    Each block overrides the entire color system.
@@ -505,4 +527,80 @@
   --sidebar-accent-foreground: #fde68a;
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-ring: rgba(251, 191, 36, 0.4);
+}
+
+/*
+ * Light themes use a shared neutral surface system. The selected colour is an
+ * accent, not a full-page background, so green/blue/orange/red do not tint the
+ * entire application the same colour as their buttons and active states.
+ */
+[data-accent="green"]:not(.dark) {
+  --background: #f2f8f4;
+  --card: #fbfdfb;
+  --popover: #fbfdfb;
+  --secondary: #e4efe8;
+  --muted: #e8f1eb;
+  --input-background: #e4efe8;
+  --sidebar: #eaf4ee;
+  --sidebar-accent: #dcece3;
+}
+
+[data-accent="blue"]:not(.dark) {
+  --background: #f3f6fb;
+  --card: #fbfcff;
+  --popover: #fbfcff;
+  --secondary: #e5ebf5;
+  --muted: #e9eef7;
+  --input-background: #e5ebf5;
+  --sidebar: #ebf1f9;
+  --sidebar-accent: #dfe8f5;
+}
+
+[data-accent="orange"]:not(.dark) {
+  --background: #fbf5ef;
+  --card: #fffdf9;
+  --popover: #fffdf9;
+  --secondary: #f1e6d8;
+  --muted: #f6eadc;
+  --input-background: #f1e6d8;
+  --sidebar: #f7eee4;
+  --sidebar-accent: #f1e2d1;
+}
+
+[data-accent="red"]:not(.dark) {
+  --background: #fbf3f2;
+  --card: #fffafa;
+  --popover: #fffafa;
+  --secondary: #f0e1df;
+  --muted: #f6e8e6;
+  --input-background: #f0e1df;
+  --sidebar: #f7eae8;
+  --sidebar-accent: #f0dedd;
+}
+
+[data-accent="amber"]:not(.dark) {
+  --background: #faf7e9;
+  --card: #fffdf5;
+  --popover: #fffdf5;
+  --secondary: #eee7cb;
+  --muted: #f3ecd3;
+  --input-background: #eee7cb;
+  --sidebar: #f5efd9;
+  --sidebar-accent: #ebe2c2;
+}
+
+/* Keep light-theme typography and dividers editorial and neutral. */
+[data-accent="green"]:not(.dark),
+[data-accent="blue"]:not(.dark),
+[data-accent="orange"]:not(.dark),
+[data-accent="red"]:not(.dark),
+[data-accent="amber"]:not(.dark) {
+  --foreground: #18120a;
+  --card-foreground: #18120a;
+  --popover-foreground: #18120a;
+  --secondary-foreground: #18120a;
+  --muted-foreground: #786c5c;
+  --sidebar-foreground: #18120a;
+  --border: rgba(24, 18, 10, 0.14);
+  --sidebar-border: rgba(24, 18, 10, 0.12);
 }
