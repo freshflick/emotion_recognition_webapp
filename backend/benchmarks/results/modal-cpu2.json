@@ -1,0 +1,47 @@
+{
+  "label": "modal-cpu-2vcpu",
+  "device": "cpu",
+  "torch": "2.5.1+cu124",
+  "threads": 2,
+  "cpu": "x86_64",
+  "cpu_count": 18,
+  "gpu": null,
+  "clip": "speech.wav",
+  "chunk_secs": 3.0,
+  "audio_model": "iic/emotion2vec_plus_large",
+  "text_model": "tae898/emoberta-large",
+  "fusion": {
+    "none": {
+      "median_s": 0.9626677010000009,
+      "min_s": 0.9287400770000005,
+      "max_s": 1.012455690000003,
+      "load_s": 14.973422698,
+      "rss_mb": 6381.961216
+    },
+    "int8": {
+      "median_s": 0.6059419379999937,
+      "min_s": 0.5891932780000033,
+      "max_s": 0.6165835790000003,
+      "load_s": 8.541073849999997,
+      "rss_mb": 9388.630016
+    }
+  },
+  "stt": {
+    "base.en": {
+      "median_s": 0.7599749510000038,
+      "min_s": 0.7563877870000013,
+      "max_s": 0.7762817050000024,
+      "load_s": 2.590670639999999,
+      "transcript": "I honestly cannot believe this happened again today.",
+      "rss_mb": 9485.172736
+    },
+    "small.en": {
+      "median_s": 2.3035186750000065,
+      "min_s": 2.2150608040000037,
+      "max_s": 2.4546016190000017,
+      "load_s": 2.328813808999996,
+      "transcript": "I honestly cannot believe this happened again today.",
+      "rss_mb": 9584.61952
+    }
+  }
+}
