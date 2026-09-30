@@ -16,7 +16,7 @@ import {
   addSession, calculateSessionSummary, type EmotionData, type Emotion,
 } from "../utils/emotionEngine";
 import { LiveSession } from "../api/liveSession";
-import { toEmotionData } from "../api/adapters";
+import { labelToEmotion, toEmotionData } from "../api/adapters";
 import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
 import { getSessions, type Session } from "../utils/emotionEngine"; // add Session + getSessions to existing import
@@ -30,6 +30,86 @@ const EMOTION_COLORS: { [key in Emotion]: string } = {
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
 const mono = "'IBM Plex Mono', monospace";
+const SPEAKER_COLORS = ["#6040c8", "#2e7d52", "#c07c20", "#b8312f"];
+
+/**
+ * Tells everyone in the room whose turn it is.
+ *
+ * This exists because a single mic gives no natural feedback about when to
+ * speak: without it, people interrupt because they can't tell that a pause
+ * was just interpreted as "your turn is over". Three states, chosen to match
+ * what the endpointing code on the other end is actually doing:
+ *
+ *   - someone is mid-utterance: hold, they're still going
+ *   - the room has just gone quiet and the server is working: that turn is
+ *     sealed, and speaking now will not be cut in half
+ *   - everything is settled: it's open, go ahead
+ *
+ * It is deliberately a hint and not a gate — audio is still captured from
+ * whoever talks, and nothing is dropped.
+ */
+function TurnIndicator({
+  speaking,
+  finalising,
+  speakerName,
+  subjectName,
+  open,
+}: {
+  speaking: boolean;
+  finalising: boolean;
+  speakerName: string | null;
+  subjectName: string | null;
+  open: boolean;
+}) {
+  let tone: string;
+  let label: string;
+  let detail: string;
+  let pulse = false;
+
+  if (speaking) {
+    tone = "var(--primary)";
+    pulse = true;
+    const who = speakerName ?? subjectName ?? "Someone";
+    label = `${who} is speaking`;
+    detail = "Wait for their pause — then it's your turn";
+  } else if (finalising) {
+    tone = "var(--primary)";
+    pulse = true;
+    label = "Finishing that turn";
+    detail = "Pausing ends a turn, so the last sentence isn't cut off";
+  } else {
+    tone = "var(--muted-foreground)";
+    label = open ? "Your turn" : "Listening";
+    detail = open
+      ? "Speak naturally — a short pause sends your turn"
+      : "Waiting for someone to speak";
+  }
+
+  return (
+      <div
+          className="w-full flex flex-col items-center gap-1 py-3 px-4 text-center border"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--card)", borderRadius: 0 }}
+          role="status"
+          aria-live="polite"
+      >
+        <div className="flex items-center gap-2">
+          <span
+              className={`size-2 rounded-full inline-block ${pulse ? "animate-pulse" : ""}`}
+              style={{ backgroundColor: tone }}
+          />
+          <span
+              className="text-xs font-semibold uppercase tracking-[0.18em]"
+              style={{ fontFamily: sans, color: tone }}
+          >
+            {label}
+          </span>
+        </div>
+        <span className="text-[11px]" style={{ fontFamily: sans, color: "var(--muted-foreground)" }}>
+          {detail}
+        </span>
+      </div>
+  );
+}
 
 /**
  * Scrolling display of real microphone level. `level` is the peak amplitude
@@ -141,13 +221,42 @@ export function LiveRecording() {
   const [isPaused, setIsPaused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  // Endpointing state, pushed up from LiveSession's silence detector. Drives
+  // the turn prompt so people know when to start and when they've finished.
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [partialTranscript, setPartialTranscript] = useState("");
+  // Who the most recent completed turn belonged to. This is the honest answer
+  // to "whose turn is it": the server's diarizer knows, and it is the same
+  // attribution used for the subject's emotion, so it cannot disagree with it.
+  const [lastSpeaker, setLastSpeaker] = useState<string | null>(null);
+  const [expectedSpeakers, setExpectedSpeakers] = useState(1);
+  const [enrolledSpeakers, setEnrolledSpeakers] = useState<number[]>([]);
+  const [enrollingSpeaker, setEnrollingSpeaker] = useState<number | null>(null);
+  const [enrollmentSeconds, setEnrollmentSeconds] = useState(0);
+  // Which enrolled speaker's emotions to report. Null means "nobody picked
+  // yet", which the backend treats as analyse-everyone — a sensible fallback
+  // for a single-speaker session and for people who don't pick a subject.
+  const [subjectIndex, setSubjectIndex] = useState<number | null>(null);
+  const [subjectName, setSubjectName] = useState("");
   const [duration, setDuration] = useState(0);
   const [level, setLevel] = useState(0);
   const [emotionData, setEmotionData] = useState<EmotionData[]>([]);
   const [currentEmotion, setCurrentEmotion] = useState<EmotionData | null>(null);
   const windowEmotionDataRef = useRef<EmotionData[]>([]);
   const WINDOW_SECS = 5;
-  const [transcript, setTranscript] = useState<{ time: number; text: string; emotion: Emotion }[]>([]);
+  const [transcript, setTranscript] = useState<{
+    time: number;
+    text: string;
+    /** Null for anyone but the subject — they are transcribed, not analysed. */
+    emotion: Emotion | null;
+    /** The full reading, kept so the saved session can carry real EmotionData
+     *  rather than a label that would have to be converted back. */
+    data?: EmotionData;
+    speaker?: string;
+    speakerConfidence?: number;
+    isSubject: boolean;
+  }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const [viewedSession, setViewedSession] = useState<Session | null>(null);
 
@@ -173,6 +282,15 @@ export function LiveRecording() {
   // Releases the mic and socket if the user navigates away mid-session.
   useEffect(() => () => sessionRef.current?.teardown(), []);
 
+  // The subject picker only becomes available once everyone has enrolled —
+  // which is *after* the socket was opened to do that enrollment. So the
+  // subject in the auth handshake is always stale, and the choice has to be
+  // pushed to the open socket instead. Fires on mount too, where setSubject
+  // is a no-op because no session exists yet.
+  useEffect(() => {
+    sessionRef.current?.setSubject(subjectIndex, subjectName);
+  }, [subjectIndex, subjectName]);
+
   // Auto-follow new transcript lines while recording. Skipped when the
   // transcript is empty so navigating to the page doesn't yank the scroll
   // position down on mount.
@@ -181,7 +299,195 @@ export function LiveRecording() {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [transcript]);
 
+  const buildSession = () => new LiveSession({
+      onLevel: setLevel,
+      onProcessing: (processing) => {
+        setIsProcessing(processing);
+        // A final turn supersedes any provisional rolling estimate. Keep the
+        // preview badge visible between preview acknowledgements so it does
+        // not flicker every 1.5 seconds.
+        setIsPreviewing(false);
+      },
+      onPreview: ({ emotion, timestamp, speaker, speakerConfidence, isSubject }) => {
+        setIsPreviewing(true);
+        if (!emotion || !isSubject) return;
+        const elapsed = Math.max(
+            0,
+            Math.round((timestamp * 1000 - startTimeRef.current) / 1000),
+        );
+        // Preview estimates update the live card only. They intentionally do
+        // not enter emotionData, transcript, charts, or saved sessions.
+        setCurrentEmotion(
+            toEmotionData(elapsed, "", emotion, speaker, speakerConfidence),
+        );
+      },
+      onPartialTranscript: ({ transcript: text }) => {
+        if (text.trim()) setPartialTranscript(text);
+      },
+      onTurn: ({ speaking }) => setIsSpeaking(speaking),
+      onReading: ({ transcript: text, emotion, timestamp, speaker, speakerConfidence, isSubject }) => {
+        setIsPreviewing(false);
+        setPartialTranscript("");
+        const elapsed = Math.max(
+            0,
+            Math.round((timestamp * 1000 - startTimeRef.current) / 1000),
+        );
+        // Backends that predate subject selection omit the flag, and those
+        // sessions were single-speaker — so absent means "the subject".
+        const subject = isSubject ?? true;
+
+        // Only the subject reaches the emotion model, so a null emotion is
+        // expected for everyone else rather than an error to swallow.
+        let reading: EmotionData | undefined;
+        if (emotion) {
+          const analysed = toEmotionData(elapsed, text, emotion, speaker, speakerConfidence);
+          reading = analysed;
+          setEmotionData((prev) => [...prev, analysed]);
+
+          // Rolling window average, kept in a ref rather than state — this is
+          // an internal computation input, not something the UI renders
+          // directly, so it doesn't need to trigger its own re-render.
+          const windowStart = elapsed - WINDOW_SECS;
+          const updated = [...windowEmotionDataRef.current, analysed].filter(
+              (r) => r.timestamp >= windowStart,
+          );
+          windowEmotionDataRef.current = updated;
+
+          if (updated.length > 0) {
+            const avgFused = {happy: 0, sad: 0, angry: 0, neutral: 0};
+            for (const r of updated) {
+              for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
+                avgFused[k] += r.fused[k];
+              }
+            }
+            for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
+              avgFused[k] /= updated.length;
+            }
+            const entries = Object.entries(avgFused) as [Emotion, number][];
+            const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
+
+            setCurrentEmotion({
+              timestamp: elapsed,
+              fused: avgFused,
+              audio: avgFused,
+              text: avgFused,
+              dominantEmotion: dominant[0],
+              confidence: dominant[1],
+              isMock: analysed.isMock,
+              modalityWeights: analysed.modalityWeights,
+              audioEmotion: analysed.audioEmotion,
+              textEmotion: analysed.textEmotion,
+              speaker: analysed.speaker,
+              speakerConfidence: analysed.speakerConfidence,
+            });
+          }
+        }
+
+        // Whisper returns "" for silence — no point adding an empty line.
+        // Everyone is added regardless of subject so the transcript is the
+        // whole conversation.
+        if (text.trim()) {
+          setTranscript((prev) => [
+            ...prev,
+            {
+              time: elapsed,
+              text,
+              emotion: emotion ? labelToEmotion(emotion.top_label) : null,
+              data: reading,
+              speaker,
+              speakerConfidence,
+              isSubject: subject,
+            },
+          ]);
+        }
+
+        // The turn has settled, so name whose it was — that's what the other
+        // person is waiting on. Falls back to the raw label for speakers
+        // without a chosen name.
+        if (speaker) {
+          const label = speaker.replace(/^Speaker (\d+)$/, (_, n) => {
+            const idx = Number(n) - 1;
+            return subjectIndex === idx && subjectName.trim()
+              ? subjectName.trim()
+              : `Speaker ${n}`;
+          });
+          setLastSpeaker(label);
+        }
+      },
+      onError: (message) => toast.error(message),
+    }, expectedSpeakers);
+
+  const connectSession = async () => {
+    const existing = sessionRef.current;
+    if (existing) return existing;
+    const session = buildSession();
+    // Must be set before start(), because the auth handshake is the socket's
+    // first message and carries the subject with it.
+    session.setSubject(subjectIndex, subjectName);
+    await session.start();
+    sessionRef.current = session;
+    return session;
+  };
+
+  const handleConnectionError = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof DOMException) {
+      toast.error(
+          err.name === "NotAllowedError"
+              ? "Microphone access denied. Allow it in your browser settings and try again."
+              : "Could not access the microphone.",
+      );
+    } else {
+      toast.error(message);
+    }
+  };
+
+  const enrollSpeaker = async (speakerIndex: number) => {
+    setIsConnecting(true);
+    try {
+      const session = await connectSession();
+      setIsConnecting(false);
+      setEnrollingSpeaker(speakerIndex);
+      setEnrollmentSeconds(5);
+      session.beginEnrollment(speakerIndex);
+
+      for (let remaining = 4; remaining >= 0; remaining--) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (sessionRef.current !== session) return;
+        setEnrollmentSeconds(remaining);
+      }
+
+      await session.finishEnrollment();
+      setEnrolledSpeakers((current) =>
+          current.includes(speakerIndex) ? current : [...current, speakerIndex],
+      );
+      toast.success(`Speaker ${speakerIndex + 1} enrolled`);
+    } catch (err) {
+      handleConnectionError(err);
+    } finally {
+      setIsConnecting(false);
+      setEnrollingSpeaker(null);
+      setEnrollmentSeconds(0);
+    }
+  };
+
+  const changeExpectedSpeakers = (count: number) => {
+    sessionRef.current?.teardown();
+    sessionRef.current = null;
+    setExpectedSpeakers(count);
+    setEnrolledSpeakers([]);
+    setEnrollingSpeaker(null);
+    setEnrollmentSeconds(0);
+    // The old subject index may not exist in the new speaker set.
+    setSubjectIndex(null);
+  };
+
   const startRecording = async () => {
+    if (expectedSpeakers > 1 && enrolledSpeakers.length !== expectedSpeakers) {
+      toast.error("Enroll every expected speaker before starting analysis");
+      return;
+    }
+
     setIsConnecting(true);
     setEmotionData([]);
     windowEmotionDataRef.current = [];
@@ -189,83 +495,19 @@ export function LiveRecording() {
     setCurrentEmotion(null);
     setDuration(0);
 
-    const session = new LiveSession({
-      onLevel: setLevel,
-      onProcessing: setIsProcessing,
-      onReading: ({ transcript: text, emotion, timestamp }) => {
-        const elapsed = Math.max(
-            0,
-            Math.round((timestamp * 1000 - startTimeRef.current) / 1000),
-        );
-        const reading = toEmotionData(elapsed, text, emotion);
-        setEmotionData((prev) => [...prev, reading]);
-
-        // Rolling window average, kept in a ref rather than state — this is
-        // an internal computation input, not something the UI renders
-        // directly, so it doesn't need to trigger its own re-render.
-        const windowStart = elapsed - WINDOW_SECS;
-        const updated = [...windowEmotionDataRef.current, reading].filter(
-            (r) => r.timestamp >= windowStart,
-        );
-        windowEmotionDataRef.current = updated;
-
-        if (updated.length > 0) {
-          const avgFused = {happy: 0, sad: 0, angry: 0, neutral: 0};
-          for (const r of updated) {
-            for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
-              avgFused[k] += r.fused[k];
-            }
-          }
-          for (const k of Object.keys(avgFused) as (keyof typeof avgFused)[]) {
-            avgFused[k] /= updated.length;
-          }
-          const entries = Object.entries(avgFused) as [Emotion, number][];
-          const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
-
-          setCurrentEmotion({
-            timestamp: elapsed,
-            fused: avgFused,
-            audio: avgFused,
-            text: avgFused,
-            dominantEmotion: dominant[0],
-            confidence: dominant[1],
-            isMock: reading.isMock,
-            modalityWeights: reading.modalityWeights,
-            audioEmotion: reading.audioEmotion,
-            textEmotion: reading.textEmotion,
-          });
-        }
-
-        // Whisper returns "" for silence — no point adding an empty line.
-        if (text.trim()) {
-          setTranscript((prev) => [
-            ...prev,
-            { time: elapsed, text, emotion: reading.dominantEmotion },
-          ]);
-        }
-      },
-      onError: (message) => toast.error(message),
-    });
+    let session: LiveSession | null = null;
 
     try {
-      await session.start();
+      session = await connectSession();
+      await session.beginAnalysis();
     } catch (err) {
-      session.teardown();
+      session?.teardown();
+      sessionRef.current = null;
       setIsConnecting(false);
-      const message = err instanceof Error ? err.message : String(err);
-      if (err instanceof DOMException) {
-        toast.error(
-            err.name === "NotAllowedError"
-                ? "Microphone access denied. Allow it in your browser settings and try again."
-                : "Could not access the microphone.",
-        );
-      } else {
-        toast.error(message);
-      }
+      handleConnectionError(err);
       return;
     }
 
-    sessionRef.current = session;
     startTimeRef.current = Date.now();
     pausedTimeRef.current = 0;
     setIsConnecting(false);
@@ -300,6 +542,7 @@ export function LiveRecording() {
     // take a few seconds — hence the saving state on the button.
     const reportId = (await session?.stop()) ?? null;
     sessionRef.current = null;
+    if (expectedSpeakers > 1) setEnrolledSpeakers([]);
 
     setIsRecording(false);
     setIsPaused(false);
@@ -323,13 +566,27 @@ export function LiveRecording() {
     // Mirror the saved session locally so the dashboard updates instantly.
     // Using the backend's report id keeps this row from duplicating when the
     // store is later rehydrated from /api/reports.
+    const subjectSpeaker =
+        subjectIndex !== null ? `Speaker ${subjectIndex + 1}` : undefined;
+    const savedEmotionData = emotionData;
     addSession({
       id: reportId ?? `local-${Date.now()}`,
       timestamp: Date.now(),
       duration,
       type: "live",
-      emotionData,
-      summary: calculateSessionSummary(emotionData),
+      emotionData: savedEmotionData,
+      transcript: transcript.map((entry) => ({
+        timestamp: entry.time,
+        transcript: entry.text,
+        speaker: entry.speaker ?? "Speaker 1",
+        speakerConfidence: entry.speakerConfidence,
+        isSubject: entry.isSubject,
+        emotion: entry.data,
+      })),
+      subjectSpeaker,
+      subjectName: subjectName.trim() || undefined,
+      speakerCount: expectedSpeakers,
+      summary: calculateSessionSummary(savedEmotionData),
     });
 
     if (reportId) {
@@ -367,15 +624,15 @@ export function LiveRecording() {
   const axisStyle = { fontSize: 11, fill: "var(--muted-foreground)", fontFamily: sans };
 
   return (
-      <div className="min-h-full bg-background">
+      <div className="page-shell">
         <style>{`
         @keyframes waveBar { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
       `}</style>
 
-        <div className="max-w-7xl mx-auto p-8">
+        <div className="page-container">
           {/* Page header */}
-          <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-            <div className="flex items-start justify-between">
+          <div className="page-header" style={{ borderColor: "var(--border)" }}>
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1
                     className="font-bold text-foreground leading-tight"
@@ -388,20 +645,6 @@ export function LiveRecording() {
                   Real-time audio-text fusion · attention-based multimodal analysis
                 </p>
               </div>
-              {isActive && (
-                  <div
-                      className="flex items-center gap-2 px-3 py-1.5 border"
-                      style={{ borderColor: "var(--primary)", color: "var(--primary)" }}
-                  >
-                <span
-                    className="size-1.5 rounded-full animate-pulse inline-block"
-                    style={{ backgroundColor: "var(--primary)" }}
-                />
-                    <span className="text-xs tracking-[0.2em] uppercase font-semibold" style={{ fontFamily: sans }}>
-                  Live
-                </span>
-                  </div>
-              )}
             </div>
           </div>
 
@@ -450,6 +693,141 @@ export function LiveRecording() {
                   />
 
                   <div className="p-7 flex flex-1 flex-col items-center justify-center gap-5">
+                    {!isRecording && (
+                        <div className="w-full border-b pb-4" style={{ borderColor: "var(--border)" }}>
+                          <div className="flex items-center justify-between mb-2.5">
+                            <span className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                              Expected speakers
+                            </span>
+                            <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
+                              {expectedSpeakers}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {[1, 2, 3, 4].map((count) => (
+                                <button
+                                    key={count}
+                                    type="button"
+                                    disabled={isConnecting || enrollingSpeaker !== null}
+                                    onClick={() => changeExpectedSpeakers(count)}
+                                    className="border py-1.5 text-xs transition-colors"
+                                    style={{
+                                      borderColor: count === expectedSpeakers ? "var(--primary)" : "var(--border)",
+                                      backgroundColor: count === expectedSpeakers ? "var(--accent)" : "transparent",
+                                      color: count === expectedSpeakers ? "var(--primary)" : "var(--muted-foreground)",
+                                      fontFamily: mono,
+                                    }}
+                                >
+                                  {count}
+                                </button>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground/70 mt-2 leading-snug" style={{ fontFamily: sans }}>
+                            {expectedSpeakers === 1
+                                ? "No speaker enrollment required."
+                                : "Enroll each person before starting analysis."}
+                          </p>
+                          {expectedSpeakers > 1 && (
+                              <div className="mt-3 space-y-1.5">
+                                {Array.from({ length: expectedSpeakers }, (_, index) => {
+                                  const enrolled = enrolledSpeakers.includes(index);
+                                  const enrolling = enrollingSpeaker === index;
+                                  return (
+                                      <button
+                                          key={index}
+                                          type="button"
+                                          disabled={enrollingSpeaker !== null || isConnecting}
+                                          onClick={() => void enrollSpeaker(index)}
+                                          className="w-full border px-3 py-2 flex items-center justify-between text-left transition-colors"
+                                          style={{
+                                            borderColor: enrolled ? "var(--primary)" : "var(--border)",
+                                            backgroundColor: enrolling ? "var(--accent)" : "transparent",
+                                            fontFamily: sans,
+                                          }}
+                                      >
+                                        <span className="text-[11px] uppercase tracking-wider text-foreground">
+                                          Speaker {index + 1}
+                                        </span>
+                                        <span
+                                            className="text-[10px] uppercase tracking-wider"
+                                            style={{ color: enrolled ? "var(--primary)" : "var(--muted-foreground)" }}
+                                        >
+                                          {enrolling
+                                              ? `Speak now · ${enrollmentSeconds}s`
+                                              : enrolled
+                                                ? "Enrolled"
+                                                : "Record 5s"}
+                                        </span>
+                                      </button>
+                                  );
+                                })}
+                              </div>
+                          )}
+
+                          {/*
+                            Which speaker's emotions get analysed. Only shown
+                            once everyone is enrolled, because until then the
+                            speaker numbers aren't stable. Everyone is still
+                            transcribed regardless of this choice.
+                          */}
+                          {expectedSpeakers > 1 && enrolledSpeakers.length === expectedSpeakers && (
+                              <div className="mt-4 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+                                <div className="flex items-center justify-between mb-2.5">
+                                  <span className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                                    Analyse emotions for
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {Array.from({ length: expectedSpeakers }, (_, index) => (
+                                      <button
+                                          key={index}
+                                          type="button"
+                                          onClick={() => setSubjectIndex(index)}
+                                          className="w-full border px-3 py-2 flex items-center gap-2.5 text-left transition-colors"
+                                          style={{
+                                            borderColor: subjectIndex === index ? "var(--primary)" : "var(--border)",
+                                            backgroundColor: subjectIndex === index ? "var(--accent)" : "transparent",
+                                            fontFamily: sans,
+                                          }}
+                                      >
+                                        <span
+                                            className="size-3 border flex items-center justify-center flex-shrink-0"
+                                            style={{ borderColor: subjectIndex === index ? "var(--primary)" : "var(--muted-foreground)" }}
+                                        >
+                                          {subjectIndex === index && (
+                                              <span className="size-1.5" style={{ backgroundColor: "var(--primary)" }} />
+                                          )}
+                                        </span>
+                                        <span className="text-[11px] uppercase tracking-wider text-foreground">
+                                          Speaker {index + 1}
+                                        </span>
+                                      </button>
+                                  ))}
+                                </div>
+                                <input
+                                    type="text"
+                                    value={subjectName}
+                                    maxLength={60}
+                                    onChange={(e) => setSubjectName(e.target.value)}
+                                    placeholder="Name (optional)"
+                                    className="mt-2.5 w-full border px-3 py-2 text-xs bg-transparent"
+                                    style={{
+                                      borderColor: "var(--border)",
+                                      color: "var(--foreground)",
+                                      fontFamily: sans,
+                                      outline: "none",
+                                    }}
+                                />
+                                <p className="text-[10px] text-muted-foreground/70 mt-2 leading-snug" style={{ fontFamily: sans }}>
+                                  {subjectIndex === null
+                                      ? "Nobody selected — every speaker's emotions are analysed and counted together."
+                                      : `Only Speaker ${subjectIndex + 1} feeds the emotion model, charts and reports. Everyone else is transcribed but not scored.`}
+                                </p>
+                              </div>
+                          )}
+                        </div>
+                    )}
+
                     {/* Mic button */}
                     <div className="relative flex items-center justify-center mt-2">
                       {isActive && (
@@ -460,14 +838,32 @@ export function LiveRecording() {
                       )}
                       <button
                           onClick={!isRecording && !isConnecting ? startRecording : undefined}
-                          disabled={isRecording || isConnecting || !backendReachable}
-                          title={backendReachable ? undefined : "Backend is not running"}
+                          disabled={
+                            isRecording
+                            || isConnecting
+                            || enrollingSpeaker !== null
+                            || !backendReachable
+                            || (expectedSpeakers > 1 && enrolledSpeakers.length !== expectedSpeakers)
+                          }
+                          title={
+                            !backendReachable
+                              ? "Backend is not running"
+                              : expectedSpeakers > 1 && enrolledSpeakers.length !== expectedSpeakers
+                                ? "Enroll every speaker first"
+                                : undefined
+                          }
                           className="relative flex items-center justify-center transition-all duration-200"
                           style={{
                             width: 80, height: 80,
                             borderRadius: 0,
                             backgroundColor: !isRecording ? "var(--foreground)" : isActive ? "var(--primary)" : "#c07c20",
-                            cursor: !isRecording && backendReachable && !isConnecting ? "pointer" : "not-allowed",
+                            cursor: !isRecording
+                                && backendReachable
+                                && !isConnecting
+                                && enrollingSpeaker === null
+                                && (expectedSpeakers === 1 || enrolledSpeakers.length === expectedSpeakers)
+                              ? "pointer"
+                              : "not-allowed",
                             opacity: backendReachable ? 1 : 0.4,
                           }}
                       >
@@ -518,14 +914,16 @@ export function LiveRecording() {
 
                     <div className="w-full"><WaveformBars active={isActive} level={level} /></div>
 
-                    {isProcessing && isActive && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <span className="size-1.5 rounded-full animate-pulse inline-block" style={{ backgroundColor: "var(--primary)" }} />
-                          <span className="text-xs tracking-wider uppercase" style={{ fontFamily: sans, color: "var(--primary)" }}>
-                            Processing…
-                          </span>
-                        </div>
+                    {isActive && (
+                        <TurnIndicator
+                            speaking={isSpeaking}
+                            finalising={isProcessing}
+                            speakerName={lastSpeaker}
+                            subjectName={subjectName.trim() || null}
+                            open={!isSpeaking && !isProcessing}
+                        />
                     )}
+
 
                     {isRecording && (
                         <div className="flex gap-2 w-full">
@@ -646,21 +1044,60 @@ export function LiveRecording() {
                         </p>
                     ) : (
                         transcript.map((entry, index) => (
-                            <div key={index} className="flex items-start gap-3">
+                            <div
+                                key={index}
+                                className="flex items-start gap-3"
+                                // Other participants are context, not data —
+                                // dim them so the subject's turns read first.
+                                style={{ opacity: entry.isSubject ? 1 : 0.62 }}
+                            >
                         <span className="text-xs text-muted-foreground/60 tabular-nums pt-0.5 w-7 flex-shrink-0" style={{ fontFamily: mono }}>
                           {entry.time}s
                         </span>
-                              <span
-                                  className="text-xs px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-semibold"
-                                  style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[entry.emotion], fontFamily: sans }}
-                              >
-                          {entry.emotion}
-                        </span>
+                              {entry.speaker && (
+                                  <span
+                                      className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-semibold"
+                                      style={{
+                                        backgroundColor: "var(--muted)",
+                                        color: SPEAKER_COLORS[Math.max(0, Number(entry.speaker.replace(/\D/g, "")) - 1) % SPEAKER_COLORS.length],
+                                        fontFamily: sans,
+                                      }}
+                                      title={entry.speakerConfidence != null ? `${(entry.speakerConfidence * 100).toFixed(0)}% speaker match` : undefined}
+                                  >
+                                    {entry.speaker}
+                                    {entry.isSubject ? " · subject" : ""}
+                                  </span>
+                              )}
+                              {entry.emotion ? (
+                                  <span
+                                      className="text-xs px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-semibold"
+                                      style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[entry.emotion], fontFamily: sans }}
+                                  >
+                            {entry.emotion}
+                          </span>
+                              ) : (
+                                  <span
+                                      className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-normal"
+                                      style={{ backgroundColor: "transparent", color: "var(--muted-foreground)", fontFamily: sans }}
+                                      title="Transcribed only — not analysed for emotion"
+                                  >
+                                    no analysis
+                                  </span>
+                              )}
                               <span className="text-sm text-foreground leading-relaxed" style={{ fontFamily: sans, fontWeight: 400, wordBreak: "break-word" }}>
                           {entry.text}
                         </span>
                             </div>
                         ))
+                    )}
+                    {partialTranscript && isActive && (
+                        <div className="flex items-start gap-3 border-t pt-3" style={{ borderColor: "var(--border)", opacity: 0.72 }}>
+                          <span className="text-xs text-muted-foreground/60 tabular-nums pt-0.5 w-7 flex-shrink-0" style={{ fontFamily: mono }}>now</span>
+                          <span className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-semibold" style={{ backgroundColor: "var(--accent)", color: "var(--primary)", fontFamily: sans }}>live</span>
+                          <span className="text-sm text-foreground leading-relaxed" style={{ fontFamily: sans, fontWeight: 400, wordBreak: "break-word" }}>
+                            {partialTranscript}<span className="ml-1 inline-block animate-pulse">▌</span>
+                          </span>
+                        </div>
                     )}
                     <div ref={transcriptEndRef} />
                   </div>
@@ -675,7 +1112,7 @@ export function LiveRecording() {
                   </p>
                   <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground" style={{ fontFamily: sans }}>
                   <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: isActive ? "var(--primary)" : "var(--muted-foreground)", opacity: isActive ? 1 : 0.4 }} />
-                    {isActive ? "Analyzing" : currentEmotion ? "Last Result" : "Awaiting Input"}
+                    {isProcessing ? "Finalising" : isPreviewing ? "Live estimate" : isActive ? "Listening" : currentEmotion ? "Last result" : "Awaiting input"}
                 </span>
                 </div>
 
@@ -695,7 +1132,7 @@ export function LiveRecording() {
                     {/* Fused prediction — the model's actual output */}
                     <div>
                       <span className="text-xs tracking-[0.14em] uppercase font-semibold block mb-3" style={{ fontFamily: sans, color: "var(--foreground)" }}>
-                        Fused Prediction
+                         {isPreviewing ? "Live Estimate" : "Fused Prediction"}
                       </span>
                       <div
                           className="border p-4 flex flex-col items-center justify-center gap-1.5 min-h-[130px]"
@@ -712,7 +1149,7 @@ export function LiveRecording() {
                             </>
                         ) : (
                             <span className="text-sm text-muted-foreground/50 italic" style={{ fontFamily: serif }}>
-                              Awaiting first chunk…
+                               Speak to see a live estimate…
                             </span>
                         )}
                       </div>
@@ -797,7 +1234,7 @@ export function LiveRecording() {
 
         {/* Recent live sessions — hidden while a session is actively recording */}
         {!isRecording && (
-            <div className="max-w-7xl mx-auto px-8 pb-8">
+            <div className="page-container pt-8 pb-8">
               <RecentLiveSessions onViewSession={setViewedSession} />
             </div>
         )}

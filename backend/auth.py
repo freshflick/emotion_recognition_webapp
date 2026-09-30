@@ -57,7 +57,7 @@ def decode_jwt(token: str) -> dict | None:
             audience="authenticated",
         )
         return payload
-    except jwt.InvalidTokenError:
+    except Exception:
         return None
 
 def _user_has_verified_mfa(user_id: str) -> bool:

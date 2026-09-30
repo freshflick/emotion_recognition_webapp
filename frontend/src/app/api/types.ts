@@ -32,7 +32,12 @@ export interface EmotionResult {
   mock?: boolean;
 }
 
-/** One 8-second analysis window of an uploaded file. */
+/**
+ * One window of an uploaded file that the subject spoke.
+ *
+ * `segments` only ever contains these, so charts and summaries fed from
+ * `segments` describe the subject alone. `utterances` holds every window.
+ */
 export interface AnalysisSegment {
   start: number;
   end: number;
@@ -40,22 +45,45 @@ export interface AnalysisSegment {
   emotion: EmotionResult;
 }
 
+/** One window of an uploaded file, whoever spoke in it. */
+export interface Utterance {
+  start: number;
+  end: number;
+  transcript: string;
+  isSubject: boolean;
+  /** ECAPA cosine similarity against the subject profile; null when no
+   *  sample was supplied and the file was treated as a single speaker. */
+  matchScore: number | null;
+}
+
 export interface AnalyzeFileResponse {
   /** All segment transcripts joined. */
   transcript: string;
-  /** Highest-confidence segment, as a single headline result. */
-  emotion: EmotionResult;
-  /** The real timeline — the model window is fixed at 8s, so long files
-   *  are analysed as consecutive windows rather than truncated. */
+  /** Highest-confidence subject segment, or null when the subject never
+   *  spoke (their voice was enrolled but doesn't appear in the file). */
+  emotion: EmotionResult | null;
+  /** The subject's real timeline — the model window is fixed at 8s, so long
+   *  files are analysed as consecutive windows rather than truncated. */
   segments: AnalysisSegment[];
-  /** Majority vote across windows (first-seen wins ties) — the same value
-   *  persisted with the report. Absent on rows written before it existed. */
+  /** Every window with its speaker attribution, so the full conversation is
+   *  available even though only `segments` was analysed for emotion. */
+  utterances: Utterance[];
+  /** Majority vote across the subject's windows (first-seen wins ties) — the
+   *  same value persisted with the report. Absent on rows written before it
+   *  existed. */
   summary?: {
     dominant_label: BackendLabel | null;
     label_distribution: Record<string, number>;
     average_confidence: number;
+    /** Total windows, and how many of them were the subject's. */
+    utterances?: number;
+    analysed_utterances?: number;
   };
   duration_secs: number;
+  /** "Speaker 1" when a subject sample was enrolled, else null. */
+  subject_speaker: string | null;
+  subject_name: string | null;
+  speaker_count: number;
   report_id: string | null;
 }
 
@@ -84,10 +112,19 @@ export interface ReportRow {
     filename?: string;
     readings?: LiveReading[];
     num_chunks?: number;
+    /** Subject attribution, present on rows written by the subject-aware
+     *  backend. Absent on older rows, which were single-speaker. */
+    subject_speaker?: string | null;
+    subject_name?: string | null;
+    speaker_count?: number;
+    /** Full per-window conversation, stored for upload reports. */
+    utterances?: Utterance[];
     summary?: {
       dominant_label: BackendLabel | null;
       label_distribution: Record<string, number>;
       average_confidence: number;
+      utterances?: number;
+      analysed_utterances?: number;
     };
   };
 }
@@ -96,18 +133,56 @@ export interface ReportRow {
 
 export interface LiveReading {
   transcript: string;
-  emotion: EmotionResult;
+  /** Null for anyone other than the subject — their turn is transcribed but
+   *  deliberately not run through the emotion model. */
+  emotion: EmotionResult | null;
   timestamp: number;
+  speaker?: string;
+  speakerConfidence?: number;
+  isSubject?: boolean;
 }
 
 export type LiveServerMessage =
-  | { type: "ready"; chunkBytes: number; sampleRate: number; mock: boolean }
+  | { type: "ready"; chunkBytes: number; previewBytes: number; previewMinBytes: number; sampleRate: number; mock: boolean; expectedSpeakers: number; requiresEnrollment: boolean; subjectSpeaker: string | null }
+  | { type: "enrollment_started"; speakerIndex: number }
+  | { type: "enrollment_complete"; speakerIndex: number }
+  | { type: "enrollment_error"; message: string }
+  | { type: "analysis_started" }
+  /**
+   * The server finished analysing a committed utterance. Sent after every
+   * `flush`, including ones that held no speech, so the client never waits on
+   * a reading that will not arrive.
+   */
+  | { type: "flush_done" }
+  /** Acknowledges a `set_subject` message, echoing the resolved subject. */
+  | { type: "subject_updated"; subjectSpeaker: string | null }
   | {
       type: "reading";
       transcript: string;
-      emotion: EmotionResult;
+      emotion: EmotionResult | null;
       timestamp: number;
       chunkIndex: number;
+      speaker: string;
+      speakerConfidence: number;
+      isSubject: boolean;
     }
+  | {
+      type: "preview";
+      previewIndex: number;
+      transcript: string;
+      emotion: EmotionResult | null;
+      timestamp: number;
+      speaker: string;
+      speakerConfidence: number;
+      isSubject: boolean;
+    }
+  | {
+      type: "preview_transcript";
+      previewIndex: number;
+      transcript: string;
+      timestamp: number;
+    }
+  | { type: "preview_done"; previewIndex: number }
+  | { type: "preview_error"; previewIndex: number; message: string }
   | { type: "summary"; reportId: string | null; numReadings: number }
   | { type: "error"; message: string };

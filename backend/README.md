@@ -28,6 +28,7 @@ The production fusion model uses:
 - **Audio:** `iic/emotion2vec_plus_large` through FunASR
 - **Text:** `tae898/emoberta-large`
 - **Speech-to-text:** Faster-Whisper, configured as `small.en` by default
+- **Speaker recognition:** ECAPA-TDNN (`speechbrain/spkrec-ecapa-voxceleb`)
 - **Labels:** `Neutral`, `Happy`, `Sad`, `Angry`, and `Frustrated`
 
 The model internally keeps `Frustrated` as a separate class. The frontend maps
@@ -92,6 +93,16 @@ DEV_USER_ID=00000000-0000-0000-0000-000000000000
 USE_MOCK_MODEL=false
 
 FUSION_MODEL_CHECKPOINT=checkpoints/iemocap_e2v_large_model.pt
+WHISPER_MODEL_SIZE=small.en
+WHISPER_PREVIEW_MODEL_SIZE=base.en
+DEVICE=cpu
+SPEAKER_MODEL_NAME=speechbrain/spkrec-ecapa-voxceleb
+SUBJECT_MATCH_SIMILARITY=0.45
+UPLOAD_WINDOW_SECONDS=4.0
+MAX_UTTERANCE_SECS=12.0
+MIN_UTTERANCE_SECS=0.6
+PREVIEW_INTERVAL_SECS=0.8
+PREVIEW_MIN_SECS=0.5
 ```
 
 For optional Supabase persistence, also configure:
@@ -134,6 +145,40 @@ Accepts an audio upload as multipart form data. Supported formats depend on
 Files are decoded to 16 kHz mono audio and split into eight-second model
 windows. Each window returns a transcript and emotion result.
 
+#### Analysing one person in a multi-person recording
+
+A single microphone cannot separate two voices that overlap, so rather than
+trying, the endpoint can be told whose emotions you care about. Supply a short
+`multipart` field `subject_sample` containing a few seconds of the subject's
+voice, plus an optional `subject_name` used as the display label:
+
+```bash
+curl -X POST http://localhost:8000/api/analyze-file \
+  -F "file=@conversation.wav" \
+  -F "subject_sample=@alex-5s.wav" \
+  -F "subject_name=Alex"
+```
+
+The sample is enrolled as a single ECAPA voice profile, and the file is then cut
+into shorter four-second windows so a window is less likely to straddle two
+speakers. Each window is matched against that profile:
+
+- `utterances` — every window, with `isSubject`, `matchScore` and a transcript.
+- `segments` — only the subject's windows, each with an emotion result.
+
+So the full conversation is still transcribed, while emotion, statistics and
+reports describe one person. If the subject never speaks, `emotion` is `null`
+rather than being filled in with somebody else's reading.
+
+Omit `subject_sample` to keep the previous single-speaker behaviour, where
+every window is treated as the subject.
+
+`SUBJECT_MATCH_SIMILARITY` (default `0.45`) sets the cosine-similarity cutoff.
+Same-speaker ECAPA embeddings typically score around 0.6–0.8 and different
+speakers 0.0–0.3, so the default sits in the gap; lower it to be more
+inclusive, raise it to be stricter. `UPLOAD_WINDOW_SECONDS` (default `4.0`)
+controls the window length used when a subject is enrolled.
+
 ### `WS /ws/live-session`
 
 Live sessions use raw 16 kHz mono PCM16 frames, not MediaRecorder WebM chunks.
@@ -141,14 +186,44 @@ Live sessions use raw 16 kHz mono PCM16 frames, not MediaRecorder WebM chunks.
 Handshake:
 
 ```json
-{"token":"<jwt>","format":"pcm16","sampleRate":16000}
+{
+  "token": "<jwt>",
+  "format": "pcm16",
+  "sampleRate": 16000,
+  "expectedSpeakers": 2,
+  "subjectSpeakerIndex": 0,
+  "subjectName": "Alex"
+}
 ```
 
+`subjectSpeakerIndex` is zero-based and optional. When set, only that enrolled
+speaker's chunks are run through the emotion model; everyone else is still
+transcribed and labelled, but arrives with `emotion: null` and
+`isSubject: false`. Omit it to analyse every speaker.
+
 The server replies with `ready`, processes buffered audio, and sends readings:
+
+When `expectedSpeakers` is greater than one, enroll each speaker before
+analysis. For each participant, send `begin_enrollment`, stream five seconds of
+PCM16, then send `end_enrollment`:
+
+```json
+{"action":"begin_enrollment","speakerIndex":0}
+{"action":"end_enrollment"}
+```
+
+After every speaker returns `enrollment_complete`, send:
+
+```json
+{"action":"start_analysis"}
+```
 
 ```json
 {
   "type": "reading",
+  "speaker": "Speaker 1",
+  "speakerConfidence": 0.91,
+  "isSubject": true,
   "transcript": "Example text.",
   "emotion": {
     "top_label": "Happy",
@@ -160,7 +235,69 @@ The server replies with `ready`, processes buffered audio, and sends readings:
 }
 ```
 
-Send `{"action":"end"}` to flush the final buffer and close the session.
+A non-subject turn is the same message with `"isSubject": false` and
+`"emotion": null`.
+
+### Rolling live previews
+
+While the speaker continues, the client requests a rolling preview:
+
+```json
+{"action":"preview"}
+```
+
+The server replies with `type: "preview"` using the latest audio window, then
+`type: "preview_done"`. Preview messages update the live emotion card only;
+they are not added to `session_readings`, the transcript, charts, or saved
+reports. The pause-triggered `reading` remains the authoritative final result.
+`PREVIEW_INTERVAL_SECS` controls how often the browser requests a preview and
+`PREVIEW_MIN_SECS` prevents very short/noisy snippets from reaching Whisper.
+Partial captions use `WHISPER_PREVIEW_MODEL_SIZE` so they do not wait for the
+larger final-transcript model. The final sentence still uses
+`WHISPER_MODEL_SIZE` for accuracy. Both models are loaded at startup, using
+more CPU/RAM in exchange for lower live-caption latency.
+
+### Turn boundaries
+
+The server does not cut utterances on a timer. It buffers audio and waits for
+the client to declare a boundary, which it does by detecting a pause of roughly
+1000 ms:
+
+```json
+{"action":"flush"}
+```
+
+That is what keeps a sentence intact — a fixed-length chunker splits turns
+mid-word and leaves the speaker with no idea a cut was coming, which is exactly
+what makes two people talk over each other. Three settings bound the behaviour:
+
+| Setting | Default | Role |
+| --- | --- | --- |
+| `MAX_UTTERANCE_SECS` | `12.0` | Ceiling for a monologue that never pauses. Committed automatically. |
+| `MIN_UTTERANCE_SECS` | `0.6` | A shorter pause is discarded as a cough rather than analysed. |
+| `SPEECH_END_SILENCE_MS` | `1000` | Client-side pause that triggers `flush`. |
+
+A silence-triggered commit has its trailing 350 ms trimmed before analysis, so
+the pause does not dilute the speaker embedding. After every commit the server
+sends `{"type":"flush_done"}` — including for a pause containing no speech, so
+the client never waits on a reading that will not arrive. The client uses this
+to clear its "finalising" state and to advance the turn prompt.
+
+Send `{"action":"end"}` to commit the final buffer and close the session.
+
+### Changing the subject mid-session
+
+The subject picker only becomes available once everyone has enrolled, which is
+*after* the socket opened to perform that enrollment — so the value in the
+auth handshake is always stale. Send the choice over the open socket instead:
+
+```json
+{"action":"set_subject","speakerIndex":1,"name":"Sam"}
+```
+
+`null` analyses every speaker. The server replies
+`{"type":"subject_updated","subjectSpeaker":"Speaker 2"}`. Safe to send more
+than once; the latest wins.
 
 ### `GET /api/reports`
 
@@ -174,6 +311,21 @@ Returns saved reports when Supabase persistence is configured.
 - Audio preprocessing includes gating, normalization, dynamic-range
   compression, and high-pass filtering.
 - Faster-Whisper is forced to English and runs locally.
+- Live sessions can expect one to four speakers. Each participant records a
+  reference sample first; subsequent ECAPA embeddings are matched only against
+  those fixed profiles, producing stable `Speaker 1`, `Speaker 2`, etc. labels.
+- Single-microphone diarization works best when speakers take turns. Overlap
+  and very short utterances can still be assigned incorrectly.
+- Two people speaking at the same time are not separated. Source separation
+  (SepFormer) was evaluated and removed: its output is degraded enough that
+  both transcription and speaker matching got worse. During genuine overlap the
+  louder voice is treated as the active speaker, which is the safer failure.
+- To keep one person's emotions out of a group recording, pick them as the
+  subject (live sessions) or attach a `subject_sample` (uploads). Everything
+  else is transcribed but never reaches the emotion model, so statistics and
+  reports describe the subject alone. This is attribution, not separation: a
+  window in which two people talk over each other matches whoever dominates it,
+  and a subject who does not speak at all produces no emotion data.
 - The fusion model returns a fused prediction plus audio-only and text-only
   comparison predictions.
 - The live UI uses a five-second rolling emotion window for the current result.
@@ -215,5 +367,7 @@ more accurate but requires more CPU time. A CUDA-capable machine can use
 
 ### Mock results appear
 
-Set `USE_MOCK_MODEL=false` and confirm the checkpoint exists. The startup log
-will state whether mock mode is active.
+Mock mode is only enabled when `USE_MOCK_MODEL=true` is explicitly set. With
+the normal `false` setting, a missing checkpoint stops startup instead of
+silently returning random predictions. Confirm that
+`FUSION_MODEL_CHECKPOINT` points to the real checkpoint.

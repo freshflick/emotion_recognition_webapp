@@ -9,9 +9,10 @@ import tempfile
 import struct
 import io
 
-from config import DEVICE, WHISPER_MODEL_SIZE
+from config import DEVICE, WHISPER_MODEL_SIZE, WHISPER_PREVIEW_MODEL_SIZE
 
 _model = None
+_preview_model = None
 _mock_mode = False
 
 _MOCK_PHRASES = [
@@ -24,15 +25,8 @@ _MOCK_PHRASES = [
 ]
 
 _HALLUCINATION_PATTERNS = {
-    "thank you", "thanks for watching", "thank you for watching",
-    "you're welcome", "subscribe", "like and subscribe",
-    "thank you so much", "thanks so much", "thank you very much",
     "i can't read it", "i cannot read it", "i can't read that",
-    "hello, hello", "hello hello",
     "this is a real conversation", "people express emotions",
-    "i hope you enjoyed", "see you in the next one",
-    "hope you enjoyed this video", "enjoyed this video",
-    "next one", "bye", "don't forget to subscribe",
 }
 
 _HALLUCINATION_SUBSTRINGS = [
@@ -48,11 +42,19 @@ _HALLUCINATION_SUBSTRINGS = [
 
 
 def load_model():
-    global _model
+    global _model, _preview_model
     from faster_whisper import WhisperModel
 
     compute_type = "int8" if DEVICE == "cpu" else "float16"
     _model = WhisperModel(WHISPER_MODEL_SIZE, device=DEVICE, compute_type=compute_type)
+    if WHISPER_PREVIEW_MODEL_SIZE == WHISPER_MODEL_SIZE:
+        _preview_model = _model
+    else:
+        _preview_model = WhisperModel(
+            WHISPER_PREVIEW_MODEL_SIZE,
+            device=DEVICE,
+            compute_type=compute_type,
+        )
 
 
 def enable_mock_mode():
@@ -64,11 +66,16 @@ def is_mock() -> bool:
     return _mock_mode
 
 
-def transcribe(audio_bytes: bytes) -> str:
+def transcribe(
+    audio_bytes: bytes,
+    ignore_before_secs: float = 0.0,
+    preview: bool = False,
+) -> str:
     if _mock_mode:
         return random.choice(_MOCK_PHRASES)
 
-    if _model is None:
+    model = _preview_model if preview else _model
+    if model is None:
         raise RuntimeError("Whisper model not loaded — call load_model() at startup")
 
     # Quick silence check: compute RMS energy from raw PCM
@@ -88,23 +95,51 @@ def transcribe(audio_bytes: bytes) -> str:
     with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
         tmp.write(audio_bytes)
         tmp.flush()
-        segments, info = _model.transcribe(
+        segments, info = model.transcribe(
             tmp.name,
             language="en",
-            beam_size=5,
-            best_of=5,
+            beam_size=2 if preview else 5,
+            best_of=1,
+            repetition_penalty=1.05,
+            no_repeat_ngram_size=0,
             temperature=0,
             condition_on_previous_text=False,
             no_speech_threshold=0.6,
             log_prob_threshold=-1.0,
             suppress_blank=True,
+            hallucination_silence_threshold=1.5,
+            word_timestamps=True,
             vad_filter=True,
             vad_parameters={
-                "min_silence_duration_ms": 450,
-                "speech_pad_ms": 180,
+                "min_silence_duration_ms": 350,
+                "speech_pad_ms": 300,
             },
         )
-        text = " ".join(seg.text.strip() for seg in segments).strip()
+        accepted_segments = []
+        for segment in segments:
+            # VAD can still pass clicks, breaths, or room noise. Faster-Whisper
+            # exposes confidence signals per segment; discard output it also
+            # considers uncertain, repetitive, or likely non-speech.
+            if segment.no_speech_prob > 0.65:
+                continue
+            if segment.avg_logprob < -0.9:
+                continue
+            if segment.compression_ratio > 2.4:
+                continue
+            if ignore_before_secs > 0 and segment.words:
+                # The beginning is overlap from the previous live chunk. Keep
+                # words crossing the boundary, but do not emit old words twice.
+                words = [
+                    word.word
+                    for word in segment.words
+                    if word.end > ignore_before_secs + 0.05
+                ]
+                segment_text = "".join(words).strip()
+            else:
+                segment_text = segment.text.strip()
+            if segment_text:
+                accepted_segments.append(segment_text)
+        text = " ".join(accepted_segments).strip()
 
     # Filter hallucinations
     if text.lower().strip(".!") in _HALLUCINATION_PATTERNS:

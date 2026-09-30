@@ -79,7 +79,7 @@ export function Settings() {
     });
 
     if (reauthError) {
-      toast.error("Current password is incorrect" + currentPassword);
+       toast.error("Current password is incorrect");
       return;
     }
 
@@ -193,10 +193,10 @@ export function Settings() {
   };
 
   return (
-      <div className="p-8 bg-background min-h-full">
-        <div className="max-w-7xl mx-auto">
+      <div className="page-shell">
+        <div className="page-container">
           {/* Header */}
-          <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+          <div className="page-header" style={{ borderColor: "var(--border)" }}>
             <h1
                 className="font-bold text-foreground leading-tight"
                 style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}

@@ -5,6 +5,10 @@
 .env
 backend/.env
 
+# Local machine and IDE files
+.DS_Store
+.idea/
+
 # Python
 __pycache__/
 *.py[cod]

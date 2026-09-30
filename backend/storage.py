@@ -4,6 +4,7 @@ the browser). FastAPI is the only thing allowed to write final results —
 this keeps report integrity out of the client's hands.
 """
 from datetime import datetime, timezone
+from pathlib import Path
 
 from supabase import Client, create_client
 
@@ -56,7 +57,12 @@ def save_session_report(user_id: str, report: dict) -> dict:
     return result.data[0] if result.data else {}
 
 
-def upload_audio_file(user_id: str, filename: str, file_bytes: bytes) -> str:
+def upload_audio_file(
+    user_id: str,
+    filename: str,
+    file_bytes: bytes,
+    content_type: str = "application/octet-stream",
+) -> str:
     """
     Uploads raw audio to a Supabase Storage bucket named 'audio-uploads'.
     Returns the storage path, or "" when persistence is disabled.
@@ -66,9 +72,10 @@ def upload_audio_file(user_id: str, filename: str, file_bytes: bytes) -> str:
         return ""
 
     client = get_client()
-    path = f"{user_id}/{datetime.now(timezone.utc).timestamp()}_{filename}"
+    safe_filename = Path(filename or "upload.bin").name
+    path = f"{user_id}/{datetime.now(timezone.utc).timestamp()}_{safe_filename}"
     client.storage.from_("audio-uploads").upload(
-        path, file_bytes, {"content-type": "audio/wav"}
+        path, file_bytes, {"content-type": content_type}
     )
     return path
 

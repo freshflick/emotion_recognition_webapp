@@ -149,25 +149,37 @@ def waveform_to_wav_bytes(waveform: torch.Tensor) -> bytes:
 
 
 def split_into_windows(
-    waveform: torch.Tensor, window_samples: int = MAX_AUDIO_SAMPLES
+    waveform: torch.Tensor,
+    window_samples: int = MAX_AUDIO_SAMPLES,
+    pad: bool = True,
 ) -> list[tuple[float, float, torch.Tensor]]:
     """
-    Cut a waveform into consecutive model-sized windows.
+    Cut a waveform into consecutive windows.
 
     The model takes a fixed 8-second input, so a longer upload would otherwise
     be silently truncated to its first 8 seconds — one prediction standing in
     for the whole file. Windowing instead produces a genuine timeline, which
     is what the analysis chart is built to show.
 
-    Returns (start_secs, end_secs, padded_waveform) per window. A trailing
-    remainder shorter than half a window is folded into the previous one
-    rather than emitted as a mostly-silent padded window of its own.
+    `window_samples` may be smaller than the model's 8-second input. Pass
+    `pad=False` in that case to get the real audio without trailing silence:
+    padding a short window would dilute speaker-embedding similarity, because
+    the embedding would be computed over mostly zeros. Callers that need the
+    model-sized input can `pad_or_truncate` the window themselves.
+
+    Returns (start_secs, end_secs, waveform) per window. A trailing remainder
+    shorter than half a window is folded into the previous one rather than
+    emitted as a mostly-silent window of its own.
     """
     total = waveform.shape[0]
     if total == 0:
         return []
+
+    def prepare(chunk: torch.Tensor) -> torch.Tensor:
+        return pad_or_truncate(chunk) if pad else chunk
+
     if total <= window_samples:
-        return [(0.0, total / SAMPLE_RATE, pad_or_truncate(waveform))]
+        return [(0.0, total / SAMPLE_RATE, prepare(waveform))]
 
     windows: list[tuple[float, float, torch.Tensor]] = []
     for start in range(0, total, window_samples):
@@ -180,12 +192,10 @@ def split_into_windows(
             windows[-1] = (
                 prev_start,
                 end / SAMPLE_RATE,
-                pad_or_truncate(waveform[prev_start_sample:end]),
+                prepare(waveform[prev_start_sample:end]),
             )
             break
 
-        windows.append(
-            (start / SAMPLE_RATE, end / SAMPLE_RATE, pad_or_truncate(waveform[start:end]))
-        )
+        windows.append((start / SAMPLE_RATE, end / SAMPLE_RATE, prepare(waveform[start:end])))
 
     return windows

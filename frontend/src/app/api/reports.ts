@@ -7,7 +7,14 @@
  * to change.
  */
 import { calculateSessionSummary, type Session } from "../utils/emotionEngine";
-import { labelToEmotion, readingsToEmotionData, segmentsToEmotionData, toEmotionData } from "./adapters";
+import {
+  labelToEmotion,
+  readingsToEmotionData,
+  readingsToTranscript,
+  segmentsToEmotionData,
+  toEmotionData,
+  utterancesToTranscript,
+} from "./adapters";
 import { getReports } from "./client";
 import type { BackendLabel, ReportRow } from "./types";
 
@@ -28,9 +35,12 @@ function rowToSession(row: ReportRow): Session | null {
   const { data } = row;
   const timestamp = new Date(row.created_at).getTime();
 
-  // Live sessions store an array of per-chunk readings.
+  // Live sessions store an array of per-chunk readings, one per speaker per
+  // chunk. Subject filtering happens in the adapter so everything downstream
+  // (charts, stats, exports) sees the subject's readings only.
   if (data.readings?.length) {
-    const emotionData = readingsToEmotionData(data.readings);
+    const subject = data.subject_speaker ?? null;
+    const emotionData = readingsToEmotionData(data.readings, subject);
     const summary = calculateSessionSummary(emotionData);
     summary.dominantEmotion = resolveDominant(summary.dominantEmotion, data.summary?.dominant_label);
     return {
@@ -39,15 +49,21 @@ function rowToSession(row: ReportRow): Session | null {
       duration: Math.round(data.duration_secs ?? 0),
       type: "live",
       emotionData,
+      transcript: readingsToTranscript(data.readings, subject),
+      subjectSpeaker: subject ?? undefined,
+      subjectName: data.subject_name ?? undefined,
+      speakerCount: data.speaker_count ?? 1,
       summary,
     };
   }
 
-  // Uploads store one entry per 8-second analysis window.
-  if (data.segments?.length) {
-    const emotionData = segmentsToEmotionData(data.segments);
+  // Uploads store the subject's analysed windows in `segments` and the whole
+  // conversation in `utterances`.
+  if (data.segments?.length || data.utterances?.length) {
+    const emotionData = segmentsToEmotionData(data.segments ?? []);
     const summary = calculateSessionSummary(emotionData);
     summary.dominantEmotion = resolveDominant(summary.dominantEmotion, data.summary?.dominant_label);
+    const subject = data.subject_speaker ?? null;
     return {
       id: row.id,
       timestamp,
@@ -55,6 +71,20 @@ function rowToSession(row: ReportRow): Session | null {
       type: "upload",
       filename: data.filename,
       emotionData,
+      // Rows written before utterances existed still have a transcript; fall
+      // back to the subject's analysed windows so the panel isn't empty.
+      transcript: data.utterances?.length
+        ? utterancesToTranscript(data.utterances, data.segments ?? [])
+        : emotionData.map((e) => ({
+            timestamp: e.timestamp,
+            transcript: e.transcript ?? "",
+            speaker: subject ?? "Speaker 1",
+            isSubject: true,
+            emotion: e,
+          })),
+      subjectSpeaker: subject ?? undefined,
+      subjectName: data.subject_name ?? undefined,
+      speakerCount: data.speaker_count ?? 1,
       summary,
     };
   }
@@ -69,6 +99,16 @@ function rowToSession(row: ReportRow): Session | null {
       type: "upload",
       filename: data.filename,
       emotionData,
+      transcript: [
+        {
+          timestamp: 0,
+          transcript: data.transcript ?? "",
+          speaker: "Speaker 1",
+          isSubject: true,
+          emotion: emotionData[0],
+        },
+      ],
+      speakerCount: 1,
       summary: calculateSessionSummary(emotionData),
     };
   }

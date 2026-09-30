@@ -134,9 +134,9 @@ export function Profile() {
   };
 
   return (
-    <div className="p-8 bg-background min-h-full">
-      <div className="max-w-7xl mx-auto">
-        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+    <div className="page-shell">
+      <div className="page-container">
+        <div className="page-header" style={{ borderColor: "var(--border)" }}>
           <h1
             className="font-bold text-foreground leading-tight"
             style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
@@ -202,7 +202,7 @@ export function Profile() {
               {/* Avatar */}
               <div className="flex flex-col items-center gap-3">
                 <div className="relative group">
-                  <Avatar className="size-42">
+                  <Avatar className="size-36 sm:size-42">
                     <AvatarImage src={formData.avatar} />
                     <AvatarFallback className="text-3xl" style={{ fontFamily: serif }}>
                       {formData.name.charAt(0).toUpperCase()}

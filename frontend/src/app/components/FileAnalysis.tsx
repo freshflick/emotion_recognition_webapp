@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Upload, FileAudio, Loader2, CheckCircle2 } from "lucide-react";
+import { Upload, FileAudio, Loader2, CheckCircle2, Mic, Square } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -15,9 +15,11 @@ import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import {
   addSession, calculateSessionSummary, getSessions,
-  type EmotionData, type Emotion, type Session,
+  type EmotionData, type Emotion, type Session, type TranscriptEntry,
 } from "../utils/emotionEngine";
-import { labelToEmotion, segmentsToEmotionData } from "../api/adapters";
+import {
+  labelToEmotion, segmentsToEmotionData, utterancesToTranscript,
+} from "../api/adapters";
 import { analyzeFile as analyzeFileApi } from "../api/client";
 import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
@@ -40,6 +42,13 @@ export function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")} min`;
+}
+
+/** Seconds into the file as m:ss, for transcript timestamps. */
+export function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function timeAgo(timestamp: number) {
@@ -253,15 +262,164 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
 
 /* ── Main FileAnalysis page ── */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // matches the backend's limit
+const SUBJECT_SAMPLE_SECONDS = 5;
+
+/**
+ * Records a short sample of the one person the user wants analysed.
+ *
+ * A single microphone can't pull two voices out of a recording, so instead of
+ * trying to separate them the backend matches each window against this one
+ * profile: the subject's windows get an emotion, everyone else's get a
+ * transcript only. Recording it here rather than uploading a second file
+ * means the sample is taken in the same room as the conversation.
+ */
+function SubjectSampleRecorder({
+  sample,
+  onSample,
+  disabled,
+}: {
+  sample: Blob | null;
+  onSample: (blob: Blob | null) => void;
+  disabled: boolean;
+}) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(SUBJECT_SAMPLE_SECONDS);
+  const [error, setError] = useState<string | null>(null);
+
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stop = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    setIsRecording(false);
+    setSecondsLeft(SUBJECT_SAMPLE_SECONDS);
+    recorderRef.current?.state === "recording" && recorderRef.current.stop();
+    recorderRef.current = null;
+  }, []);
+
+  const start = async () => {
+    setError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (err) {
+      setError(
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Microphone access denied — allow it to record a voice sample."
+          : "Could not access the microphone.",
+      );
+      return;
+    }
+
+    chunksRef.current = [];
+    // webm/opus is what every browser here can record; the backend decodes it
+    // with ffmpeg, so the browser's preferred type is fine as-is.
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    recorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      if (blob.size === 0) {
+        setError("Nothing was recorded — try again.");
+        onSample(null);
+      } else {
+        onSample(blob);
+      }
+    };
+
+    setIsRecording(true);
+    setSecondsLeft(SUBJECT_SAMPLE_SECONDS);
+    recorder.start();
+
+    let remaining = SUBJECT_SAMPLE_SECONDS;
+    timerRef.current = setInterval(() => {
+      remaining -= 1;
+      setSecondsLeft(remaining);
+      if (remaining <= 0) stop();
+    }, 1000);
+  };
+
+  if (sample) {
+    return (
+      <div className="border px-3 py-2 flex items-center justify-between" style={{ borderColor: "var(--primary)" }}>
+        <span className="flex items-center gap-2 text-[11px] uppercase tracking-wider" style={{ fontFamily: sans, color: "var(--primary)" }}>
+          <CheckCircle2 style={{ width: 13, height: 13 }} />
+          Voice sample ready
+        </span>
+        <button
+            type="button"
+            onClick={() => onSample(null)}
+            className="text-[10px] uppercase tracking-wider underline"
+            style={{ fontFamily: sans, color: "var(--muted-foreground)" }}
+        >
+          Re-record
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={disabled || isRecording}
+        onClick={() => void start()}
+        className="w-full border px-3 py-2 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+        style={{ borderColor: "var(--border)", fontFamily: sans }}
+      >
+        {isRecording ? (
+            <>
+              <Square style={{ width: 12, height: 12 }} />
+              Recording · {secondsLeft}s
+            </>
+        ) : (
+            <>
+              <Mic style={{ width: 13, height: 13 }} />
+              Record {SUBJECT_SAMPLE_SECONDS}s voice sample
+            </>
+        )}
+      </button>
+      {isRecording && (
+          <button
+              type="button"
+              onClick={stop}
+              className="mt-1.5 w-full text-[10px] uppercase tracking-wider text-muted-foreground underline"
+              style={{ fontFamily: sans }}
+          >
+            Done early
+          </button>
+      )}
+      {error && (
+          <p className="mt-1.5 text-[10px]" style={{ fontFamily: sans, color: "#b8312f" }}>
+            {error}
+          </p>
+      )}
+    </div>
+  );
+}
 
 export function FileAnalysis() {
   const navigate = useNavigate();
   const { health, isMock, refreshSessions } = useSessions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [subjectSample, setSubjectSample] = useState<Blob | null>(null);
+  const [subjectName, setSubjectName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [emotionData, setEmotionData] = useState<EmotionData[]>([]);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [viewedSession, setViewedSession] = useState<Session | null>(null);
 
@@ -296,6 +454,7 @@ export function FileAnalysis() {
     setIsProcessing(true);
     setProgress(0);
     setEmotionData([]);
+    setTranscript([]);
 
     // The backend returns one response when the whole file is done, so there
     // is no real progress to report. This creeps toward 90% at a rate scaled
@@ -308,10 +467,16 @@ export function FileAnalysis() {
     }, 200);
 
     try {
-      const result = await analyzeFileApi(selectedFile);
+      const result = await analyzeFileApi(selectedFile, subjectSample, subjectName);
       const data = segmentsToEmotionData(result.segments);
+      // Every window, not just the analysed ones — this is what keeps the
+      // other participants in the conversation.
+      const conversation = result.utterances?.length
+        ? utterancesToTranscript(result.utterances, result.segments)
+        : [];
 
       setEmotionData(data);
+      setTranscript(conversation);
       setProgress(100);
       setAnalysisComplete(true);
 
@@ -329,10 +494,18 @@ export function FileAnalysis() {
         type: "upload",
         filename: selectedFile.name,
         emotionData: data,
+        transcript: conversation,
+        subjectSpeaker: result.subject_speaker ?? undefined,
+        subjectName: result.subject_name ?? undefined,
+        speakerCount: result.speaker_count ?? 1,
         summary,
       });
 
-      if (result.report_id) {
+      if (data.length === 0 && subjectSample) {
+        // The sample matched nobody, which is worth saying plainly — reporting
+        // the most confident window as the subject's would be a lie.
+        toast.warning("The subject's voice wasn't found in this file — only the transcript was saved.");
+      } else if (result.report_id) {
         toast.success("Analysis complete");
         void refreshSessions();
       } else {
@@ -363,11 +536,11 @@ export function FileAnalysis() {
   const axisStyle = { fontSize: 11, fill: "var(--muted-foreground)", fontFamily: sans };
 
   return (
-      <div className="p-8 bg-background min-h-full">
-        <div className="max-w-7xl mx-auto">
+      <div className="page-shell">
+        <div className="page-container">
 
           {/* Header */}
-          <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+          <div className="page-header" style={{ borderColor: "var(--border)" }}>
             <h1
                 className="font-bold text-foreground leading-tight"
                 style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
@@ -411,7 +584,7 @@ export function FileAnalysis() {
                 style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
                 onClick={() => fileInputRef.current?.click()}
             >
-              <div className="p-12 text-center border-b border-dashed" style={{ borderColor: "var(--border)" }}>
+               <div className="p-6 sm:p-10 text-center border-b border-dashed" style={{ borderColor: "var(--border)" }}>
                 <Upload
                     className="mx-auto mb-4"
                     style={{ width: 36, height: 36, color: "var(--muted-foreground)", opacity: 0.4 }}
@@ -444,6 +617,45 @@ export function FileAnalysis() {
 
             {selectedFile && !analysisComplete && (
                 <div className="mt-4 space-y-3">
+                  {/*
+                    Optional, and deliberately so: without a sample the file is
+                    analysed as a single speaker, which is still the right answer
+                    for a solo recording.
+                  */}
+                  <div className="border p-4 space-y-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                    <div>
+                      <p className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
+                        Whose emotions?
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/70 mt-1 leading-snug" style={{ fontFamily: sans }}>
+                        A microphone can't pull two voices apart, so record a short sample of
+                        the person you care about. Their turns get analysed; everyone else's
+                        are transcribed only. Skip this for a single-speaker recording.
+                      </p>
+                    </div>
+                    <SubjectSampleRecorder
+                        sample={subjectSample}
+                        onSample={setSubjectSample}
+                        disabled={isProcessing}
+                    />
+                    {subjectSample && (
+                        <input
+                            type="text"
+                            value={subjectName}
+                            maxLength={60}
+                            onChange={(e) => setSubjectName(e.target.value)}
+                            placeholder="Name (optional)"
+                            className="w-full border px-3 py-2 text-xs bg-transparent"
+                            style={{
+                              borderColor: "var(--border)",
+                              color: "var(--foreground)",
+                              fontFamily: sans,
+                              outline: "none",
+                            }}
+                        />
+                    )}
+                  </div>
+
                   <Button
                       className="w-full text-[11px] tracking-[0.15em] uppercase py-3 font-normal"
                       onClick={analyzeFile}
@@ -463,12 +675,67 @@ export function FileAnalysis() {
                       <div className="space-y-1.5">
                         <Progress value={progress} className="h-0.5 rounded-none" />
                         <p className="text-[11px] tracking-widest uppercase text-muted-foreground text-center font-normal" style={{ fontFamily: sans }}>
-                          Extracting emotion features...
+                           Extracting emotion features…
                         </p>
                       </div>
                   )}
                 </div>
             )}
+
+          {/* Full conversation — every speaker, not just the analysed one */}
+          {analysisComplete && transcript.length > 0 && (
+              <div className="mb-8">
+                <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
+                  Transcript
+                </p>
+                <div className="border p-4" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                  <div className="max-h-72 overflow-y-auto space-y-3" style={{ backgroundColor: "var(--background)" }}>
+                    {transcript.map((entry, i) => (
+                        <div
+                            key={i}
+                            className="flex items-start gap-3"
+                            style={{ opacity: entry.isSubject ? 1 : 0.62 }}
+                        >
+                          <span
+                              className="text-xs text-muted-foreground/60 tabular-nums pt-0.5 w-12 flex-shrink-0"
+                              style={{ fontFamily: mono }}
+                          >
+                            {formatTime(entry.offsetSecs ?? entry.timestamp)}
+                          </span>
+                          <span
+                              className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-semibold"
+                              style={{
+                                backgroundColor: "var(--muted)",
+                                color: entry.isSubject ? "var(--primary)" : "var(--muted-foreground)",
+                                fontFamily: sans,
+                              }}
+                          >
+                            {entry.isSubject ? subjectName.trim() || "Subject" : "Other"}
+                          </span>
+                          {entry.emotion && (
+                              <span
+                                  className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-semibold"
+                                  style={{
+                                    backgroundColor: "var(--muted)",
+                                    color: EMOTION_COLORS[entry.emotion.dominantEmotion],
+                                    fontFamily: sans,
+                                  }}
+                              >
+                                {entry.emotion.dominantEmotion}
+                              </span>
+                          )}
+                          <span
+                              className="text-sm text-foreground leading-relaxed"
+                              style={{ fontFamily: sans, fontWeight: 400, wordBreak: "break-word" }}
+                          >
+                            {entry.transcript}
+                          </span>
+                        </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+          )}
           </div>
 
           {/* ── Current Emotion Status ── */}

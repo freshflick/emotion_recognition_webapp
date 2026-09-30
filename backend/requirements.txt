@@ -11,6 +11,7 @@ supabase==2.11.0
 
 # Speech-to-text (CTranslate2-optimised Whisper — 4x faster, same accuracy)
 faster-whisper>=1.0.0
+speechbrain==1.0.3
 
 # Audio handling
 pydub==0.25.1                 # needs ffmpeg on the host

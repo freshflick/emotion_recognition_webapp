@@ -8,7 +8,7 @@ import {
     Legend,
     ResponsiveContainer,
 } from "recharts";
-import { type Emotion, type Session } from "../utils/emotionEngine";
+import { type Emotion, type Session, type TranscriptEntry } from "../utils/emotionEngine";
 import {
     Dialog,
     DialogContent,
@@ -50,6 +50,26 @@ export function SessionDetailsDialog({session, onClose,}: {
 
     const topEmotions = Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
+    // Every turn, so the other participants are still readable. Falls back to
+    // the subject's readings for rows saved before transcripts were stored.
+    const conversation: TranscriptEntry[] = session.transcript?.length
+        ? session.transcript
+        : session.emotionData
+            .filter((d) => d.transcript)
+            .map((d) => ({
+                timestamp: d.timestamp,
+                transcript: d.transcript ?? "",
+                speaker: d.speaker ?? "Speaker 1",
+                isSubject: true,
+                emotion: d,
+            }));
+
+    const subjectLabel =
+        session.subjectName?.trim() ||
+        session.subjectSpeaker ||
+        (session.speakerCount && session.speakerCount > 1 ? "Subject" : "You");
+    const otherTurns = conversation.filter((e) => !e.isSubject).length;
+
     return (
         <Dialog open={!!session} onOpenChange={(open) => !open && onClose()}>
             <DialogContent
@@ -69,6 +89,10 @@ export function SessionDetailsDialog({session, onClose,}: {
                     </DialogTitle>
                     <DialogDescription className="text-xs text-muted-foreground font-normal" style={{ fontFamily: sans }}>
                         {formatDuration(session.duration)} &middot; {new Date(session.timestamp).toLocaleString()}
+                        {/* Say whose emotions these are, whenever it's not obvious. */}
+                        <span style={{ color: "var(--primary)" }}>
+                            &nbsp;&middot; Emotions: <strong style={{ fontWeight: 600 }}>{subjectLabel}</strong>
+                        </span>
                     </DialogDescription>
                 </DialogHeader>
 
@@ -105,6 +129,9 @@ export function SessionDetailsDialog({session, onClose,}: {
                                     <div className="text-2xl font-bold" style={{ fontFamily: serif }}>
                                         {session.emotionData.length}
                                     </div>
+                                    <p className="text-[10px] text-muted-foreground font-normal" style={{ fontFamily: sans }}>
+                                        {otherTurns > 0 ? `of ${conversation.length} turns` : "turns analysed"}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -150,26 +177,60 @@ export function SessionDetailsDialog({session, onClose,}: {
                         )}
                     </div>
 
-                    {/* Right: transcript, scrollable so long recordings don't blow out the dialog */}
-                    {session.emotionData.some((d) => d.transcript) && (
+                    {/* Right: transcript, scrollable so long recordings don't blow out the dialog.
+                        Driven by `conversation`, not emotionData, so the other
+                        participants' turns are shown too — without an emotion. */}
+                    {conversation.length > 0 && (
                         <div className="px-6 py-6">
-                            <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal mb-3" style={{ fontFamily: sans }}>
-                                Transcript
-                            </p>
+                            <div className="flex items-center justify-between mb-3">
+                                <p className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-normal" style={{ fontFamily: sans }}>
+                                    Transcript
+                                </p>
+                                {otherTurns > 0 && (
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal" style={{ fontFamily: sans }}>
+                                        {otherTurns} unanalysed
+                                    </span>
+                                )}
+                            </div>
                             <div className="border p-4 space-y-2 max-h-[50vh] overflow-y-auto" style={{ borderColor: "var(--border)", backgroundColor: "var(--background)" }}>
-                                {session.emotionData.map((data, index) => (
-                                    <div key={index} className="flex items-start gap-3 text-sm border-b py-2 last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                                {conversation.map((entry, index) => (
+                                    <div
+                                        key={index}
+                                        className="flex items-start gap-3 text-sm border-b py-2 last:border-b-0"
+                                        style={{ borderColor: "var(--border)", opacity: entry.isSubject ? 1 : 0.62 }}
+                                    >
                     <span className="text-[11px] text-muted-foreground/50 tabular-nums w-8 flex-shrink-0 pt-0.5 font-normal" style={{ fontFamily: mono }}>
-                      [{data.timestamp}s]
+                      [{entry.offsetSecs ?? entry.timestamp}s]
                     </span>
                                         <span
-                                            className="text-[11px] px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-normal"
-                                            style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[data.dominantEmotion], fontFamily: sans }}
+                                            className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-semibold"
+                                            style={{
+                                                backgroundColor: entry.isSubject ? "var(--accent)" : "var(--muted)",
+                                                color: entry.isSubject ? "var(--primary)" : "var(--muted-foreground)",
+                                                fontFamily: sans,
+                                            }}
+                                            title={entry.speakerConfidence != null ? `${(entry.speakerConfidence * 100).toFixed(0)}% speaker match` : undefined}
                                         >
-                      {data.dominantEmotion}
+                                            {entry.speaker}
+                                        </span>
+                                        {entry.emotion ? (
+                                            <span
+                                                className="text-[11px] px-1.5 py-0.5 flex-shrink-0 tracking-widest uppercase font-normal"
+                                                style={{ backgroundColor: "var(--muted)", color: EMOTION_COLORS[entry.emotion.dominantEmotion], fontFamily: sans }}
+                                            >
+                      {entry.emotion.dominantEmotion}
                     </span>
+                                        ) : (
+                                            <span
+                                                className="text-[10px] px-1.5 py-0.5 flex-shrink-0 tracking-wider uppercase font-normal"
+                                                style={{ backgroundColor: "transparent", color: "var(--muted-foreground)", fontFamily: sans }}
+                                                title="Transcribed only — not analysed for emotion"
+                                            >
+                                                no analysis
+                                            </span>
+                                        )}
                                         <span className="text-sm text-foreground font-normal" style={{ fontFamily: sans }}>
-                      {data.transcript}
+                      {entry.transcript}
                     </span>
                                     </div>
                                 ))}

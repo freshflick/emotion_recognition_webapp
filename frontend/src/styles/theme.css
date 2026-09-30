@@ -600,7 +600,5 @@
   --popover-foreground: #18120a;
   --secondary-foreground: #18120a;
   --muted-foreground: #786c5c;
-  --sidebar-foreground: #18120a;
   --border: rgba(24, 18, 10, 0.14);
-  --sidebar-border: rgba(24, 18, 10, 0.12);
 }

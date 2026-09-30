@@ -3,9 +3,10 @@ import random
 import time
 from collections import Counter
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, WebSocket
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -16,15 +17,18 @@ from config import (
     DEVICE,
     DISABLE_AUTH,
     FUSION_MODEL_CHECKPOINT,
+    UPLOAD_WINDOW_SECONDS,
     USE_MOCK_MODEL,
 )
 from models import audio_utils, emotion_model, stt
+from models.speaker_diarization import OnlineSpeakerDiarizer
 from storage import get_user_reports, save_session_report, upload_audio_file
 from websocket_handler import handle_audio_session, run_blocking
 
 # Uploads larger than this are rejected before being read into memory.
 # Mirrors the "Max 50 MB" the upload UI advertises.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_SUBJECT_SAMPLE_BYTES = 10 * 1024 * 1024
 
 # Used only when the upstream quotes API is unreachable — kept short and
 # generic rather than duplicating the frontend's full quote list, since
@@ -59,21 +63,22 @@ async def lifespan(app: FastAPI):
     """Loads Whisper + the trained fusion checkpoint once, at process startup."""
     checkpoint_exists = os.path.exists(FUSION_MODEL_CHECKPOINT)
 
-    if USE_MOCK_MODEL or not checkpoint_exists:
-        reason = (
-            "USE_MOCK_MODEL=true"
-            if USE_MOCK_MODEL
-            else f"no checkpoint at {FUSION_MODEL_CHECKPOINT}"
-        )
+    if USE_MOCK_MODEL:
         emotion_model.enable_mock_mode()
         stt.enable_mock_mode()
         print(
-            f"\n[startup] *** MOCK MODE ({reason}) ***\n"
+            "\n[startup] *** MOCK MODE (USE_MOCK_MODEL=true) ***\n"
             "           Predictions and transcripts are randomised placeholders.\n"
             "           Responses are tagged \"mock\": true and the UI badges them.\n"
-            "           Drop your trained fusion_model.pt at "
+            "           Place the trained fusion checkpoint at "
             f"{FUSION_MODEL_CHECKPOINT} and set USE_MOCK_MODEL=false\n"
             "           to serve real results.\n"
+        )
+    elif not checkpoint_exists:
+        raise RuntimeError(
+            f"Fusion checkpoint not found at {FUSION_MODEL_CHECKPOINT}. "
+            "Set FUSION_MODEL_CHECKPOINT to the real checkpoint or explicitly "
+            "set USE_MOCK_MODEL=true for development."
         )
     else:
         stt.load_model()
@@ -141,7 +146,12 @@ async def quote():
     return _quote_cache["quote"]
 
 @app.post("/api/analyze-file")
-async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user)):
+async def analyze_file(
+    file: UploadFile,
+    subject_sample: UploadFile | None = File(None),
+    subject_name: str | None = Form(None),
+    user: dict = Depends(get_current_user),
+):
     """
     Non-live path: upload a full audio file, get a timeline of emotion results.
 
@@ -150,8 +160,14 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
     recording would be truncated to its first 8 seconds and reported as if it
     described the whole file. `emotion` carries the highest-confidence window
     so callers wanting a single headline result still have one.
+
+    When `subject_sample` is supplied (a short recording of the one person the
+    user cares about), every window is matched against that voice profile and
+    only the subject's windows are given an emotion. All windows still produce a
+    transcript, so the conversation stays complete. Without a sample the file is
+    treated as a single speaker, which keeps older clients working.
     """
-    raw_bytes = await file.read()
+    raw_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
 
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
@@ -172,16 +188,95 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
             status_code=400, detail=f"Could not decode audio ({ext}): {e}"
         )
 
-    windows = audio_utils.split_into_windows(waveform)
+    # Enrol the subject's voice so each window can be attributed to them.
+    diarizer = None
+    if subject_sample is not None:
+        sample_bytes = await subject_sample.read(MAX_SUBJECT_SAMPLE_BYTES + 1)
+        if len(sample_bytes) > MAX_SUBJECT_SAMPLE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "Subject sample exceeds the "
+                    f"{MAX_SUBJECT_SAMPLE_BYTES // (1024 * 1024)}MB limit"
+                ),
+            )
+        if sample_bytes:
+            # The browser's MediaRecorder emits WebM/Opus, so the declared
+            # extension has to be honoured — decoding it as "wav" makes ffmpeg
+            # fail on every real recording from the UI.
+            sample_ext = Path(subject_sample.filename or "").suffix.lstrip(".").lower()
+            if not sample_ext:
+                sample_ext = (subject_sample.content_type or "").rsplit("/", 1)[-1]
+                # A codec parameter is not a container (e.g. "webm;codecs=opus").
+                sample_ext = sample_ext.split(";")[0]
+            sample_ext = sample_ext or "webm"
+            try:
+                subject_wave = await run_blocking(
+                    audio_utils.bytes_to_full_waveform,
+                    await run_blocking(audio_utils.to_wav_pcm16, sample_bytes, sample_ext),
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400, detail=f"Could not decode the subject sample ({e})"
+                )
+            try:
+                diarizer = OnlineSpeakerDiarizer(1, force_enrollment=True)
+                await run_blocking(diarizer.prepare)
+                await run_blocking(diarizer.enroll, 0, subject_wave)
+            except ValueError as e:
+                # Enrollment is a user mistake (too short / silent), not a crash.
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                raise HTTPException(
+                    status_code=503, detail=f"Speaker recognition unavailable ({e})"
+                )
+
+    # A subject sample means several people are in the file, so use shorter
+    # windows (a single 8s window often straddles two speakers) and keep them
+    # unpadded so the speaker embedding isn't diluted by trailing silence.
+    if diarizer:
+        windows = audio_utils.split_into_windows(
+            waveform,
+            window_samples=int(UPLOAD_WINDOW_SECONDS * audio_utils.SAMPLE_RATE),
+            pad=False,
+        )
+    else:
+        windows = audio_utils.split_into_windows(waveform)
     if not windows:
         raise HTTPException(status_code=400, detail="Audio file contains no samples")
 
     segments = []
+    utterances = []
     for start_secs, end_secs, window in windows:
-        window = audio_utils.enhance_audio(window)
         window_wav = await run_blocking(audio_utils.waveform_to_wav_bytes, window)
         seg_transcript = await run_blocking(stt.transcribe, window_wav)
-        seg_emotion = await run_blocking(emotion_model.predict, window, seg_transcript)
+
+        if diarizer is None:
+            is_subject = True
+            similarity = None
+        else:
+            is_subject, similarity = await run_blocking(diarizer.is_subject, window)
+
+        utterances.append(
+            {
+                "start": round(start_secs, 2),
+                "end": round(end_secs, 2),
+                "transcript": seg_transcript,
+                "isSubject": is_subject,
+                "matchScore": round(similarity, 3) if similarity is not None else None,
+            }
+        )
+
+        if not is_subject:
+            # Someone else's turn: transcript only, no emotion.
+            continue
+        if not seg_transcript.strip():
+            continue
+
+        analysed_window = audio_utils.pad_or_truncate(audio_utils.enhance_audio(window))
+        seg_emotion = await run_blocking(
+            emotion_model.predict, analysed_window, seg_transcript
+        )
         segments.append(
             {
                 "start": round(start_secs, 2),
@@ -191,12 +286,13 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
             }
         )
 
-    headline = max(segments, key=lambda s: s["emotion"]["confidence"])
-    full_transcript = " ".join(s["transcript"] for s in segments if s["transcript"]).strip()
+    full_transcript = " ".join(
+        u["transcript"] for u in utterances if u["transcript"]
+    ).strip()
 
-    # Majority vote across windows, same convention as the live path's
-    # _summarise(): Counter.most_common(1) lets the first-seen label win
-    # ties. Stored so the UI can show the same dominant emotion as the DB
+    # Majority vote across the subject's windows only, same convention as the
+    # live path's _summarise(): Counter.most_common(1) lets the first-seen label
+    # win ties. Stored so the UI can show the same dominant emotion as the DB
     # instead of re-deriving it with its own tie-break.
     seg_labels = [s["emotion"]["top_label"] for s in segments]
     seg_counts = Counter(seg_labels)
@@ -207,29 +303,47 @@ async def analyze_file(file: UploadFile, user: dict = Depends(get_current_user))
         "average_confidence": (
             sum(s["emotion"]["confidence"] for s in segments) / seg_total if seg_total else 0.0
         ),
+        "utterances": len(utterances),
+        "analysed_utterances": seg_total,
     }
+
+    # A file where the subject never appears has no headline to report; saying so
+    # is more useful than reporting another person's emotion as theirs.
+    headline = (
+        max(segments, key=lambda s: s["emotion"]["confidence"])["emotion"]
+        if segments
+        else None
+    )
+
+    cleaned_name = (subject_name or "").strip()[:60] or None
 
     result = {
         "transcript": full_transcript,
-        "emotion": headline["emotion"],
+        "emotion": headline,
         "segments": segments,
+        "utterances": utterances,
         "summary": summary,
         "duration_secs": round(waveform.shape[0] / audio_utils.SAMPLE_RATE, 2),
+        "subject_speaker": "Speaker 1" if diarizer else None,
+        "subject_name": cleaned_name,
+        "speaker_count": 1,
     }
 
     # Persistence is best-effort: a Supabase outage shouldn't cost the user
     # the analysis they just waited for.
     report_id = None
     try:
+        original_filename = Path(file.filename or "upload.wav").name
+        content_type = file.content_type or "application/octet-stream"
         storage_path = upload_audio_file(
-            user["sub"], file.filename or "upload.wav", raw_bytes
+            user["sub"], original_filename, raw_bytes, content_type
         )
         saved = save_session_report(
             user["sub"],
             {
                 **result,
                 "type": "upload",
-                "filename": file.filename,
+                "filename": original_filename,
                 "audio_path": storage_path,
             },
         )

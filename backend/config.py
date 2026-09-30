@@ -19,9 +19,9 @@ def _flag(name: str, default: str = "false") -> bool:
 DISABLE_AUTH = _flag("DISABLE_AUTH")
 DEV_USER_ID = os.getenv("DEV_USER_ID", "00000000-0000-0000-0000-000000000000")
 
-# USE_MOCK_MODEL returns randomised predictions in the real response shape,
-# so the full request path can be exercised before the trained checkpoint
-# exists. Also engaged automatically if the checkpoint file is missing.
+# USE_MOCK_MODEL is an explicit development switch. A missing checkpoint is a
+# startup error rather than an implicit fallback, so a real deployment cannot
+# silently serve random predictions.
 USE_MOCK_MODEL = _flag("USE_MOCK_MODEL")
 
 # --- Supabase ---
@@ -46,13 +46,30 @@ ALLOWED_ORIGINS = [
 
 # --- Whisper (speech-to-text, feeds the text branch of your fusion model) ---
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small.en")  # tiny.en/base.en/small.en/medium.en
+# A separate lightweight model keeps partial captions responsive while the
+# larger model remains responsible for the final sentence transcript.
+WHISPER_PREVIEW_MODEL_SIZE = os.getenv("WHISPER_PREVIEW_MODEL_SIZE", "base.en")
+
+# --- Speaker diarization ----------------------------------------------------
+SPEAKER_MODEL_NAME = os.getenv(
+    "SPEAKER_MODEL_NAME", "speechbrain/spkrec-ecapa-voxceleb"
+)
+
+# Cosine similarity an utterance must reach against the enrolled subject's voice
+# profile to be counted as theirs. Same-speaker ECAPA embeddings typically sit
+# around 0.6-0.8 and different speakers around 0.0-0.3, so the midpoint is a
+# reasonable default; lower it to be more inclusive, raise it to be stricter.
+SUBJECT_MATCH_SIMILARITY = float(os.getenv("SUBJECT_MATCH_SIMILARITY", "0.45"))
+
+# Uploaded conversations are cut into shorter windows than the live stream so
+# that a window is unlikely to contain two different speakers at once.
+UPLOAD_WINDOW_SECONDS = float(os.getenv("UPLOAD_WINDOW_SECONDS", "4.0"))
 
 # --- Your trained fusion model ---
-# Path to the checkpoint train.py saves (outputs/models/fusion_model.pt).
-# Copy that file into this project (e.g. into ./checkpoints/) once training
-# is done, or point this at wherever it lives on the GPU box.
+# Path to the trained fusion checkpoint. Point this at the checkpoint location
+# on another machine when running outside the repository.
 FUSION_MODEL_CHECKPOINT = os.getenv(
-    "FUSION_MODEL_CHECKPOINT", "checkpoints/fusion_model.pt"
+    "FUSION_MODEL_CHECKPOINT", "checkpoints/iemocap_e2v_large_model.pt"
 )
 
 import multiprocessing
@@ -66,10 +83,19 @@ SAMPLE_RATE = 16_000
 MAX_AUDIO_SECS = 8
 MAX_AUDIO_SAMPLES = SAMPLE_RATE * MAX_AUDIO_SECS
 
-# --- Live session chunking ---
-# How much audio to buffer before running one prediction. The browser streams
-# 16kHz mono PCM16 (see websocket_handler.py), which is 32000 bytes/second,
-# so the default below is ~4 seconds of speech per prediction.
-# This is independent of MAX_AUDIO_SECS above — that's the model's fixed
-# input window; this is how often you re-run the model during a live session.
-CHUNK_THRESHOLD_BYTES = int(os.getenv("CHUNK_THRESHOLD_BYTES", str(32000 * 3)))
+# ── Utterance endpointing ────────────────────────────────────────────────
+# Live turns are cut by the *client* on detected silence, not on a timer, so a
+# sentence is not guillotined mid-word. MAX_UTTERANCE_SECS bounds the
+# client-driven case: a monologue that never pauses still gets analysed every so
+# often rather than growing without limit. MIN_UTTERANCE_SECS discards anything
+# shorter as not a real turn (a cough, a click) — Whisper tends to hallucinate
+# on near-silence, so analysing it would invent a reading.
+# Independent of MAX_AUDIO_SECS above: that is the model's fixed input window,
+# these decide how often the model runs during a live session.
+MAX_UTTERANCE_SECS = float(os.getenv("MAX_UTTERANCE_SECS", "12.0"))
+MIN_UTTERANCE_SECS = float(os.getenv("MIN_UTTERANCE_SECS", "0.6"))
+
+# Rolling emotion previews keep the live card responsive while a sentence is
+# still being spoken. They are provisional and never enter the saved report.
+PREVIEW_INTERVAL_SECS = float(os.getenv("PREVIEW_INTERVAL_SECS", "0.8"))
+PREVIEW_MIN_SECS = float(os.getenv("PREVIEW_MIN_SECS", "0.5"))

@@ -126,11 +126,11 @@ export function Dashboard() {
     const axisStyle = { fontSize: 11, fill: "var(--muted-foreground)", fontFamily: sans };
 
     return (
-        <div className="p-8 min-h-full bg-background">
-          <div className="max-w-7xl mx-auto">
+        <div className="page-shell">
+          <div className="page-container">
 
             {/* Masthead header */}
-            <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
+            <div className="page-header" style={{ borderColor: "var(--border)" }}>
                 <h1
                     className="font-bold text-foreground leading-tight mb-2"
                     style={{
@@ -143,10 +143,10 @@ export function Dashboard() {
                     <em style={{ color: "var(--primary)", fontStyle: "italic" }}>{user.name}.</em>
                 </h1>
                 <p
-                    className="text-sm text-muted-foreground max-w"
+                    className="text-sm text-muted-foreground max-w-2xl"
                     style={{ fontFamily: sans, fontWeight: 300, lineHeight: 1.6 }}
                 >
-                    Your emotion monitoring console is live and ready. Analysis is running in real time.
+                    A clear view of your recent sessions, trends, and emotion signals.
                 </p>
             </div>
 
@@ -154,7 +154,7 @@ export function Dashboard() {
             <div className="flex flex-wrap items-start mb-8">
                 {quote && (
                     <div
-                        className="flex-1 pl-5 italic text text-muted-foreground leading-relaxed min-w-[240px]"
+                        className="flex-1 border-l pl-5 italic text-muted-foreground leading-relaxed min-w-[240px]"
                         style={{ fontFamily: serif, borderColor: "var(--border)" }}
                     >
                         "{quote.text}"
@@ -219,7 +219,7 @@ export function Dashboard() {
                     <StatBlock
                         label="Avg Confidence"
                         value={`${(avgConfidence * 100).toFixed(1)}%`}
-                        sub="Model accuracy"
+                        sub="Average model confidence"
                     />
                 </div>
             </div>

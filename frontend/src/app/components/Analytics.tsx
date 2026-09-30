@@ -179,12 +179,12 @@ export function Analytics() {
   const legendStyle = { fontSize: 11, fontFamily: sans, textTransform: "uppercase" as const, letterSpacing: "0.08em" };
 
   return (
-      <div className="p-8 bg-background min-h-full">
-        <div className="max-w-7xl mx-auto">
+      <div className="page-shell">
+        <div className="page-container">
 
         {/* Header */}
-        <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-          <div className="flex items-end justify-between gap-4">
+        <div className="page-header" style={{ borderColor: "var(--border)" }}>
+          <div className="flex flex-wrap items-end justify-between gap-4">
             <h1
                 className="font-bold text-foreground leading-tight"
                 style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
@@ -207,7 +207,7 @@ export function Analytics() {
             </Select>
           </div>
           <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
-            Analyze emotion distribution and trends from multimodal data
+             Review emotion distribution and trends across your sessions.
           </p>
         </div>
 

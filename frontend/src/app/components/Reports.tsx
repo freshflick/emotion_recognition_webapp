@@ -28,6 +28,15 @@ const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
 const mono = "'IBM Plex Mono', monospace";
 
+/**
+ * Whose emotions a session reports on, for the table and the exports.
+ * Falls back through name → speaker label → "—" so old single-speaker rows
+ * aren't mislabelled as multi-party.
+ */
+function subjectLabelFor(session: { subjectName?: string; subjectSpeaker?: string; speakerCount?: number }): string {
+  return session.subjectName?.trim() || session.subjectSpeaker || "—";
+}
+
 export function Reports() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -206,9 +215,9 @@ export function Reports() {
 
       autoTable(doc, {
         startY: sessionFinalY + 20,
-        head: [["Date", "Type", "Duration", "Dominant Emotion", "Confidence"]],
+        head: [["Date", "Type", "Subject", "Duration", "Dominant Emotion", "Confidence"]],
         body: targetExportSessions.map((s) => [
-          new Date(s.timestamp).toLocaleString(), s.type, `${s.duration}s`,
+          new Date(s.timestamp).toLocaleString(), s.type, subjectLabelFor(s), `${s.duration}s`,
           s.summary.dominantEmotion, `${(s.summary.averageConfidence * 100).toFixed(1)}%`,
         ]),
       });
@@ -220,9 +229,21 @@ export function Reports() {
 
   // Generate CSV Report
   const generateCSVReport = () => {
-    let csv = "Session ID,Timestamp,Type,Duration (s),Dominant Emotion,Confidence\n";
+    let csv = "Session ID,Timestamp,Type,Subject,Duration (s),Dominant Emotion,Confidence\n";
     targetExportSessions.forEach((s) => {
-      csv += `${s.id},${new Date(s.timestamp).toISOString()},${s.type},${s.duration},${s.summary.dominantEmotion},${s.summary.averageConfidence}\n`;
+      // Subject names are free text typed by the user, so they can contain the
+      // delimiters — quoting every field keeps commas and quotes from shifting
+      // the columns instead of silently corrupting the export.
+      const row = [
+        s.id,
+        new Date(s.timestamp).toISOString(),
+        s.type,
+        subjectLabelFor(s),
+        s.duration,
+        s.summary.dominantEmotion,
+        s.summary.averageConfidence,
+      ].map((value) => `"${String(value).replace(/"/g, '""')}"`);
+      csv += `${row.join(",")}\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -236,12 +257,12 @@ export function Reports() {
   };
 
   return (
-      <div className="p-8 bg-background min-h-full">
-        <div className="max-w-7xl mx-auto">
+      <div className="page-shell">
+        <div className="page-container">
 
           {/* Header */}
-          <div className="border-b mb-8 pb-6" style={{ borderColor: "var(--border)" }}>
-            <div className="flex items-end justify-between gap-4">
+          <div className="page-header" style={{ borderColor: "var(--border)" }}>
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <h1
                   className="font-bold text-foreground leading-tight"
                   style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
@@ -288,7 +309,7 @@ export function Reports() {
                 className="text-xs text-muted-foreground uppercase tracking-wider font-normal"
                 style={{ fontFamily: sans }}
             >
-              Date Range:
+               Filter dates
             </span>
 
               <Input
@@ -483,6 +504,7 @@ export function Reports() {
                         </th>
                         <th className="px-6 py-3.5">Timestamp</th>
                         <th className="px-6 py-3.5">Type</th>
+                        <th className="px-6 py-3.5">Subject</th>
                         <th className="px-6 py-3.5">Duration</th>
                         <th className="px-6 py-3.5">Dominant Emotion</th>
                         <th className="px-6 py-3.5 text-right">Confidence</th>
@@ -511,6 +533,27 @@ export function Reports() {
                               </td>
                               <td className="px-6 py-3.5 uppercase tracking-wider text-xs font-normal">
                                 {session.type}
+                              </td>
+                              <td className="px-6 py-3.5 font-normal">
+                                {(() => {
+                                  const label = subjectLabelFor(session);
+                                  if (label === "—") {
+                                    return (
+                                        <span className="text-muted-foreground" title="No subject recorded for this session">
+                                          —
+                                        </span>
+                                    );
+                                  }
+                                  const multi = (session.speakerCount ?? 1) > 1;
+                                  return (
+                                      <span
+                                          style={{ color: multi ? "var(--primary)" : undefined }}
+                                          title={multi ? "Emotions were analysed for this speaker only" : undefined}
+                                      >
+                                        {label}
+                                      </span>
+                                  );
+                                })()}
                               </td>
                               <td className="px-6 py-3.5 tabular-nums font-normal" style={{ fontFamily: mono }}>
                                 {session.duration}s

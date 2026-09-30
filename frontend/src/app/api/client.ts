@@ -1,14 +1,18 @@
 /**
  * REST calls to the FastAPI backend.
  *
- * Paths are relative ("/api/..."), which is deliberate: in dev the Vite proxy
- * forwards them to the backend (see vite.config.ts) and in production FastAPI
- * serves the built frontend from its own origin. Same code, no CORS, no
- * environment-dependent base URL.
+ * In development, an empty VITE_BACKEND_ORIGIN keeps requests relative so the
+ * Vite proxy handles them. Cloudflare Pages sets that variable to the Modal
+ * backend origin for production.
  */
 import { getAccessToken } from "../lib/supabase";
 import { BACKEND_LABELS } from "./types";
 import type { AnalyzeFileResponse, HealthResponse, ReportRow } from "./types";
+
+const BACKEND_ORIGIN = (import.meta.env.VITE_BACKEND_ORIGIN ?? "").replace(/\/$/, "");
+const CONTROL_ORIGIN = (
+  import.meta.env.VITE_CONTROL_ORIGIN ?? BACKEND_ORIGIN
+).replace(/\/$/, "");
 
 /** Thrown for any non-2xx response, carrying the status for call sites. */
 export class ApiError extends Error {
@@ -43,7 +47,11 @@ async function errorMessage(res: Response): Promise<string> {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  origin = BACKEND_ORIGIN,
+): Promise<T> {
 
   let res: Response;
   try {
@@ -51,7 +59,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
     const headers = { ...authHeaders_, ...(init.headers ?? {}) };
 
-    res = await fetch(path, {
+    res = await fetch(`${origin}${path}`, {
       ...init,
       headers,
     });
@@ -73,7 +81,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export function getHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>("/api/health");
+  return request<HealthResponse>("/api/health", {}, CONTROL_ORIGIN);
 }
 
 export interface QuoteResponse {
@@ -85,13 +93,30 @@ export interface QuoteResponse {
  *  it calls the upstream quotes API itself so the browser never has to deal
  *  with that API's own CORS policy). Unauthenticated; same for every user. */
 export function getQuote(): Promise<QuoteResponse> {
-  return request<QuoteResponse>("/api/quote");
+  return request<QuoteResponse>("/api/quote", {}, CONTROL_ORIGIN);
 }
 
-/** Upload one complete audio file and get a single fused prediction back. */
-export function analyzeFile(file: File): Promise<AnalyzeFileResponse> {
+/**
+ * Upload one complete audio file and get a fused prediction back.
+ *
+ * `subjectSample` is an optional recording of the one person the user wants
+ * analysed. With it, the backend attributes each window to either that person
+ * or "someone else", and only the subject's windows come back with an emotion.
+ * Without it the file is treated as a single speaker, which is all the earlier
+ * behaviour was.
+ */
+export function analyzeFile(
+  file: File,
+  subjectSample?: Blob | null,
+  subjectName?: string | null,
+): Promise<AnalyzeFileResponse> {
   const form = new FormData();
   form.append("file", file);
+  if (subjectSample && subjectSample.size > 0) {
+    form.append("subject_sample", subjectSample, "subject-sample.webm");
+  }
+  const name = subjectName?.trim();
+  if (name) form.append("subject_name", name.slice(0, 60));
   // No Content-Type header — the browser must set the multipart boundary.
   return request<AnalyzeFileResponse>("/api/analyze-file", {
     method: "POST",
@@ -100,7 +125,7 @@ export function analyzeFile(file: File): Promise<AnalyzeFileResponse> {
 }
 
 export function getReports(): Promise<ReportRow[]> {
-  return request<ReportRow[]>("/api/reports");
+  return request<ReportRow[]>("/api/reports", {}, CONTROL_ORIGIN);
 }
 
 /** Delete persisted session reports by id. Local-only sessions simply
@@ -110,7 +135,7 @@ export function deleteReports(ids: string[]): Promise<{ deleted: number }> {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
-  });
+  }, CONTROL_ORIGIN);
 }
 
 /**

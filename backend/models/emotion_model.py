@@ -38,18 +38,19 @@ class FusionEmotionModel(nn.Module):
     Late-fusion emotion classifier (Emotion2Vec Large via FunASR + EmoBERTa)
     with Attention-Gating."""
 
-    def __init__(self, num_classes: int = NUM_LABELS, dropout: float = 0.3):
+    def __init__(
+        self,
+        num_classes: int = NUM_LABELS,
+        dropout: float = 0.3,
+        device: str = "cpu",
+    ):
         super().__init__()
         self.num_classes = num_classes
 
         print("Loading emotion2vec_plus_large via FunASR...")
-        import os
         from funasr import AutoModel as FunASRAutoModel
-        _emotion2vec_cache = os.path.expanduser(
-            "~/.cache/modelscope/hub/iic/emotion2vec_plus_large"
-        )
         funasr_pipeline = FunASRAutoModel(
-            model=_emotion2vec_cache, disable_update=True, device="cpu"
+            model=AUDIO_MODEL_NAME, device=device
         )
         self.audio_encoders = nn.ModuleList([funasr_pipeline.model])
 
@@ -235,7 +236,7 @@ def load_model(checkpoint_path: str, device: str = "cpu"):
     _audio_proc = audio_processor
     _text_tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
 
-    _model = FusionEmotionModel(num_classes=NUM_LABELS)
+    _model = FusionEmotionModel(num_classes=NUM_LABELS, device=device)
     state = torch.load(checkpoint_path, map_location=device, weights_only=True)
 
     if isinstance(state, dict):

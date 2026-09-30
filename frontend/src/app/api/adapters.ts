@@ -11,8 +11,14 @@
  * emotions, it is contained here. Every backend response passes through
  * `toEmotionData()`, which fills the two unsupported keys with 0.
  */
-import type { Emotion, EmotionData } from "../utils/emotionEngine";
-import type { AnalysisSegment, BackendLabel, EmotionResult, LiveReading } from "./types";
+import type { Emotion, EmotionData, TranscriptEntry } from "../utils/emotionEngine";
+import type {
+  AnalysisSegment,
+  BackendLabel,
+  EmotionResult,
+  LiveReading,
+  Utterance,
+} from "./types";
 
 /** Backend label -> the frontend's lowercase key. */
 const LABEL_TO_EMOTION: Record<BackendLabel, Emotion> = {
@@ -51,6 +57,8 @@ export function toEmotionData(
   timestamp: number,
   transcript: string,
   emotion: EmotionResult,
+  speaker?: string,
+  speakerConfidence?: number,
 ): EmotionData {
   const fused = toScores(emotion.probs);
   const audio = emotion.audio_emotion ? toScores({ [emotion.audio_emotion.label]: emotion.audio_emotion.confidence } as Record<BackendLabel, number>) : fused;
@@ -64,6 +72,8 @@ export function toEmotionData(
     dominantEmotion: LABEL_TO_EMOTION[emotion.top_label] ?? "neutral",
     confidence: emotion.confidence,
     transcript,
+    speaker,
+    speakerConfidence,
     modalityWeights: emotion.modality_weights,
     audioEmotion: emotion.audio_emotion ? { label: LABEL_TO_EMOTION[emotion.audio_emotion.label] ?? "neutral", confidence: emotion.audio_emotion.confidence } : undefined,
     textEmotion: emotion.text_emotion ? { label: LABEL_TO_EMOTION[emotion.text_emotion.label] ?? "neutral", confidence: emotion.text_emotion.confidence } : undefined,
@@ -78,11 +88,105 @@ export function segmentsToEmotionData(segments: AnalysisSegment[]): EmotionData[
   );
 }
 
-/** Convert a stored live session's readings back into chart data. */
-export function readingsToEmotionData(readings: LiveReading[]): EmotionData[] {
+/**
+ * Did the backend mark this reading as the subject's?
+ *
+ * Rows saved before the subject feature existed have no `isSubject` field,
+ * and were by definition single-speaker — so "absent" has to mean "yes" or
+ * every old report would lose all of its data. The same reasoning applies to
+ * a session with exactly one speaker, which needs no attribution at all.
+ */
+function isSubjectReading(reading: LiveReading, subject?: string | null): boolean {
+  if (typeof reading.isSubject === "boolean") return reading.isSubject;
+  if (subject) return reading.speaker === subject;
+  return true;
+}
+
+/**
+ * Live readings → chart data, subject only.
+ *
+ * Non-subject readings are dropped here rather than at each chart, so no
+ * component downstream has to reason about missing emotions.
+ */
+export function readingsToEmotionData(
+  readings: LiveReading[],
+  subject?: string | null,
+): EmotionData[] {
   if (readings.length === 0) return [];
   const start = readings[0].timestamp;
-  return readings.map((r) =>
-    toEmotionData(Math.round(r.timestamp - start), r.transcript, r.emotion),
-  );
+  return readings
+    .filter((r) => r.emotion && isSubjectReading(r, subject))
+    .map((r) =>
+      toEmotionData(
+        Math.round(r.timestamp - start),
+        r.transcript,
+        r.emotion as EmotionResult,
+        r.speaker,
+        r.speakerConfidence,
+      ),
+    );
+}
+
+/**
+ * Live readings → the full conversation, everyone included.
+ *
+ * The subject's entries carry their `emotion` so the transcript view can show
+ * an emotion badge inline; other speakers' entries simply don't have one.
+ */
+export function readingsToTranscript(
+  readings: LiveReading[],
+  subject?: string | null,
+): TranscriptEntry[] {
+  if (readings.length === 0) return [];
+  const start = readings[0].timestamp;
+  return readings.map((r) => {
+    const isSubject = isSubjectReading(r, subject);
+    return {
+      timestamp: Math.round(r.timestamp - start),
+      transcript: r.transcript,
+      speaker: r.speaker ?? "Speaker 1",
+      speakerConfidence: r.speakerConfidence,
+      isSubject,
+      emotion:
+        isSubject && r.emotion
+          ? toEmotionData(
+              Math.round(r.timestamp - start),
+              r.transcript,
+              r.emotion,
+              r.speaker,
+              r.speakerConfidence,
+            )
+          : undefined,
+    };
+  });
+}
+
+/**
+ * An uploaded file's per-window conversation.
+ *
+ * `segments` and `utterances` are matched by timestamp rather than by index:
+ * non-subject windows are absent from `segments`, so a naive zip would pair
+ * the wrong transcript with the wrong emotion. Windows that are in neither
+ * array (the subject never spoke) still appear, just without emotion.
+ */
+export function utterancesToTranscript(
+  utterances: Utterance[],
+  segments: AnalysisSegment[] = [],
+): TranscriptEntry[] {
+  const byOffset = new Map<number, EmotionData>();
+  for (const s of segments) {
+    byOffset.set(
+      Math.round(s.start),
+      toEmotionData(Math.round(s.start), s.transcript, s.emotion),
+    );
+  }
+  return utterances.map((u) => ({
+    timestamp: Math.round(u.start),
+    offsetSecs: u.start,
+    transcript: u.transcript,
+    speaker: u.isSubject ? "Speaker 1" : "Other speaker",
+    isSubject: u.isSubject,
+    matchScore: u.matchScore ?? undefined,
+    emotion: byOffset.get(Math.round(u.start)),
+  }));
 }

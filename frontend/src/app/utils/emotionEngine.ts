@@ -20,10 +20,35 @@ export interface EmotionData {
   dominantEmotion: Emotion;
   confidence: number;
   transcript?: string;
+  speaker?: string;
+  speakerConfidence?: number;
   modalityWeights?: { audio: number; text: number };
   audioEmotion?: { label: Emotion; confidence: number };
   textEmotion?: { label: Emotion; confidence: number };
   isMock?: boolean;
+}
+
+/**
+ * One thing somebody said. Unlike `EmotionData` this exists for *every*
+ * speaker in a session, which is why `emotion` is optional: the emotion model
+ * is only ever run on the subject, so everyone else's turns are transcript
+ * only. Keeping the two concerns separate means the charts can keep consuming
+ * `emotionData` unchanged while the transcript still shows the whole
+ * conversation.
+ */
+export interface TranscriptEntry {
+  timestamp: number;
+  transcript: string;
+  speaker: string;
+  speakerConfidence?: number;
+  /** False for other participants — present so the UI can dim them, and so
+   *  a later reader knows the absence of emotion is deliberate. */
+  isSubject: boolean;
+  emotion?: EmotionData;
+  /** Offset from the start of an uploaded file, in seconds. */
+  offsetSecs?: number;
+  /** ECAPA similarity against the subject profile, when one was enrolled. */
+  matchScore?: number;
 }
 
 export interface Session {
@@ -33,7 +58,16 @@ export interface Session {
   type: "live" | "upload";
   /** Original upload filename, when the session came from a file. */
   filename?: string;
+  /** The subject's readings only. Charts, stats and summaries read this. */
   emotionData: EmotionData[];
+  /** Everyone's turns, in order. Other participants have no `emotion`. */
+  transcript: TranscriptEntry[];
+  /** "Speaker 2", etc. Absent on rows saved before subjects existed. */
+  subjectSpeaker?: string;
+  /** Optional name the user gave the subject for this session. */
+  subjectName?: string;
+  /** How many distinct speakers took part. */
+  speakerCount?: number;
   summary: {
     dominantEmotion: Emotion;
     averageConfidence: number;
