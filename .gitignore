@@ -4,6 +4,7 @@
 # Secrets — never commit. Copy the .example files and fill them in locally.
 .env
 backend/.env
+.env.production
 
 # Local machine and IDE files
 .DS_Store
