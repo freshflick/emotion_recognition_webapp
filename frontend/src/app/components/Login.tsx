@@ -293,7 +293,7 @@ export function Login() {
                           No Supabase credentials found, so any email and password will
                           sign you in and sessions won't be saved between reloads.
                           Add <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_URL</span> and{" "}
-                          <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_ANON_KEY</span> to{" "}
+                          <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>VITE_SUPABASE_PUBLISHABLE_KEY</span> to{" "}
                           <span className="text-foreground font-semibold" style={{ fontFamily: mono }}>.env</span> to enable real accounts.
                         </p>
                       </div>
