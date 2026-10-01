@@ -11,6 +11,8 @@ supabase==2.11.0
 
 # Speech-to-text (CTranslate2-optimised Whisper — 4x faster, same accuracy)
 faster-whisper>=1.0.0
+# faster-whisper 1.2.1 passes metadata_errors to PyAV; PyAV 19 removed it.
+av==18.1.0
 speechbrain==1.0.3
 
 # Audio handling
