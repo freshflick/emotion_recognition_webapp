@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "../config/runtime";
 
-const url = import.meta.env.VITE_SUPABASE_URL ?? "";
-const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
+const url = SUPABASE_URL;
+const anonKey = SUPABASE_PUBLISHABLE_KEY;
 
 /**
  * True when Supabase credentials are present in .env.

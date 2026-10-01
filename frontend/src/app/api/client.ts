@@ -6,13 +6,9 @@
  * backend origin for production.
  */
 import { getAccessToken } from "../lib/supabase";
+import { BACKEND_ORIGIN, CONTROL_ORIGIN } from "../config/runtime";
 import { BACKEND_LABELS } from "./types";
 import type { AnalyzeFileResponse, HealthResponse, ReportRow } from "./types";
-
-const BACKEND_ORIGIN = (import.meta.env.VITE_BACKEND_ORIGIN ?? "").replace(/\/$/, "");
-const CONTROL_ORIGIN = (
-  import.meta.env.VITE_CONTROL_ORIGIN ?? BACKEND_ORIGIN
-).replace(/\/$/, "");
 
 /** Thrown for any non-2xx response, carrying the status for call sites. */
 export class ApiError extends Error {

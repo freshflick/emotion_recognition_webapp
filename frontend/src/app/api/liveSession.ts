@@ -18,6 +18,7 @@
  * revisit (Opus-encoding each chunk as its own complete file would work).
  */
 import { getAccessToken } from "../lib/supabase";
+import { BACKEND_ORIGIN } from "../config/runtime";
 import { UtteranceEndpoint } from "./utteranceEndpoint";
 import type { LiveServerMessage } from "./types";
 
@@ -325,8 +326,7 @@ export class LiveSession {
   private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.socketStartedAt = performance.now();
-      const configuredOrigin = (import.meta.env.VITE_BACKEND_ORIGIN ?? "").replace(/\/$/, "");
-      const backendOrigin = configuredOrigin || location.origin;
+      const backendOrigin = BACKEND_ORIGIN || location.origin;
       const socketUrl = new URL("/ws/live-session", backendOrigin);
       socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(socketUrl.toString());
