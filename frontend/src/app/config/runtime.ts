@@ -12,14 +12,12 @@ declare global {
 }
 
 const runtime = typeof window !== "undefined" ? window.__EMOTION_CONFIG__ : undefined;
-const buildTime = import.meta.env.DEV
-  ? {
-      backendOrigin: import.meta.env.VITE_BACKEND_ORIGIN ?? "",
-      controlOrigin: import.meta.env.VITE_CONTROL_ORIGIN ?? "",
-      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? "",
-      supabasePublishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
-    }
-  : undefined;
+const buildTime = {
+  backendOrigin: import.meta.env.VITE_BACKEND_ORIGIN ?? "",
+  controlOrigin: import.meta.env.VITE_CONTROL_ORIGIN ?? "",
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? "",
+  supabasePublishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
+};
 
 export const BACKEND_ORIGIN = (
   runtime?.backendOrigin ?? buildTime?.backendOrigin ?? ""
