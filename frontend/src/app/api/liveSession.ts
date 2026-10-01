@@ -66,6 +66,10 @@ function resample(input: Float32Array, from: number, to: number): Float32Array {
 }
 
 export interface LiveSessionCallbacks {
+  onLatency?: (sample: {
+    kind: "microphone" | "connection" | "preview-transcript" | "preview-emotion" | "final";
+    ms: number;
+  }) => void;
   onReady?: (info: {
     mock: boolean;
     expectedSpeakers: number;
@@ -133,6 +137,10 @@ export class LiveSession {
   private enrollmentResolve: ((speakerIndex: number) => void) | null = null;
   private enrollmentReject: ((error: Error) => void) | null = null;
   private analysisResolve: (() => void) | null = null;
+  private microphoneStartedAt = 0;
+  private socketStartedAt = 0;
+  private previewStartedAt = 0;
+  private flushStartedAt = 0;
 
   private cb: LiveSessionCallbacks;
 
@@ -171,6 +179,7 @@ export class LiveSession {
 
   /** Requests the mic, opens the socket, and begins streaming. */
   async start(): Promise<void> {
+    this.microphoneStartedAt = performance.now();
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -178,6 +187,10 @@ export class LiveSession {
         noiseSuppression: true,
         autoGainControl: true,
       },
+    });
+    this.cb.onLatency?.({
+      kind: "microphone",
+      ms: performance.now() - this.microphoneStartedAt,
     });
 
     // Asking for 16kHz up front lets the browser resample for us. Not all
@@ -230,6 +243,7 @@ export class LiveSession {
       ) {
         this.previewInFlight = true;
         this.bytesSincePreview = 0;
+        this.previewStartedAt = performance.now();
         this.ws.send(JSON.stringify({ action: "preview" }));
       }
 
@@ -264,6 +278,7 @@ export class LiveSession {
     this.bytesPending = 0;
     this.bytesSincePreview = 0;
     this.endpoint.reset();
+    this.flushStartedAt = performance.now();
     this.ws.send(JSON.stringify({ action: "flush" }));
     this.cb.onProcessing?.(true);
     this.cb.onTurn?.({ speaking: false, finalising: true, meter: 0 });
@@ -309,6 +324,7 @@ export class LiveSession {
 
   private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
+      this.socketStartedAt = performance.now();
       const configuredOrigin = (import.meta.env.VITE_BACKEND_ORIGIN ?? "").replace(/\/$/, "");
       const backendOrigin = configuredOrigin || location.origin;
       const socketUrl = new URL("/ws/live-session", backendOrigin);
@@ -345,6 +361,10 @@ export class LiveSession {
           case "ready":
             if (!settled) {
               settled = true;
+              this.cb.onLatency?.({
+                kind: "connection",
+                ms: performance.now() - this.socketStartedAt,
+              });
               resolve();
             }
             this.maxUtteranceBytes = msg.chunkBytes;
@@ -361,9 +381,22 @@ export class LiveSession {
             this.cb.onReading?.(msg);
             break;
           case "preview":
+            if (this.previewStartedAt > 0) {
+              this.cb.onLatency?.({
+                kind: "preview-emotion",
+                ms: performance.now() - this.previewStartedAt,
+              });
+              this.previewStartedAt = 0;
+            }
             this.cb.onPreview?.(msg);
             break;
           case "preview_transcript":
+            if (this.previewStartedAt > 0) {
+              this.cb.onLatency?.({
+                kind: "preview-transcript",
+                ms: performance.now() - this.previewStartedAt,
+              });
+            }
             this.cb.onPartialTranscript?.(msg);
             break;
           case "preview_done":
@@ -376,6 +409,13 @@ export class LiveSession {
             this.cb.onPreviewDone?.();
             break;
           case "flush_done":
+            if (this.flushStartedAt > 0) {
+              this.cb.onLatency?.({
+                kind: "final",
+                ms: performance.now() - this.flushStartedAt,
+              });
+              this.flushStartedAt = 0;
+            }
             // The server has finished with this utterance, whether or not it
             // contained speech. Clearing on this rather than on the reading
             // is what stops the indicator hanging on a silent pause.

@@ -39,7 +39,7 @@ function StatBlock({
                        label, value, sub,
                    }: { label: string; value: string | number; sub: string }) {
     return (
-        <div className="border-l-2 pl-4 py-1" style={{ borderColor: "var(--border)" }}>
+        <div className="py-1">
             <p className="text-xs tracking-[0.18em] uppercase text-muted-foreground mb-1.5" style={{ fontFamily: sans }}>
                 {label}
             </p>
@@ -129,99 +129,51 @@ export function Dashboard() {
         <div className="page-shell">
           <div className="page-container">
 
-            {/* Masthead header */}
-            <div className="page-header" style={{ borderColor: "var(--border)" }}>
-                <h1
-                    className="font-bold text-foreground leading-tight mb-2"
-                    style={{
-                        fontFamily: serif,
-                        fontSize: "clamp(2rem, 4vw, 3rem)",
-                        letterSpacing: "-0.02em",
-                    }}
-                >
-                    {greeting},&nbsp;
-                    <em style={{ color: "var(--primary)", fontStyle: "italic" }}>{user.name}.</em>
-                </h1>
-                <p
-                    className="text-sm text-muted-foreground max-w-2xl"
-                    style={{ fontFamily: sans, fontWeight: 300, lineHeight: 1.6 }}
-                >
-                    A clear view of your recent sessions, trends, and emotion signals.
-                </p>
-            </div>
-
-            {/* Status + quote row */}
-            <div className="flex flex-wrap items-start mb-8">
-                {quote && (
-                    <div
-                        className="flex-1 border-l pl-5 italic text-muted-foreground leading-relaxed min-w-[240px]"
-                        style={{ fontFamily: serif, borderColor: "var(--border)" }}
-                    >
-                        "{quote.text}"
-                        <span
-                            className="not-italic ml-2 text-xs tracking-wider uppercase text-muted-foreground/60"
-                            style={{ fontFamily: sans }}
-                        >
-              — {quote.author}
-            </span>
+            {/* Editorial hero */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_0.65fr] gap-6 mb-10">
+                <div className="relative overflow-hidden border p-7 sm:p-10" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+                    <div className="absolute -right-10 -top-16 text-[13rem] leading-none font-bold select-none pointer-events-none" style={{ color: "var(--accent)", fontFamily: serif, opacity: 0.65 }}>∿</div>
+                    <p className="text-[11px] tracking-[0.24em] uppercase text-muted-foreground mb-5" style={{ fontFamily: sans }}>Emotion monitor / overview</p>
+                    <h1 className="relative font-bold text-foreground leading-[0.95] max-w-2xl" style={{ fontFamily: serif, fontSize: "clamp(2.2rem, 4.6vw, 4rem)", letterSpacing: "-0.045em" }}>
+                        {greeting},<br />
+                        <em style={{ color: "var(--primary)", fontStyle: "italic" }}>{user.name}.</em>
+                    </h1>
+                    <p className="relative text-sm text-muted-foreground max-w-lg mt-6" style={{ fontFamily: sans, fontWeight: 300, lineHeight: 1.7 }}>
+                        A quiet workspace for listening closely: live conversations, recorded moments, and the emotional patterns between them.
+                    </p>
+                    <div className="relative flex flex-wrap gap-3 mt-8">
+                        <Link to="/live">
+                            <Button className="gap-2.5 text-xs font-semibold tracking-[0.12em] uppercase px-5 py-3" style={{ fontFamily: sans, backgroundColor: "var(--foreground)", color: "var(--background)", borderRadius: 0, height: "auto" }}>
+                                <Mic className="size-4" /> Start live analysis
+                            </Button>
+                        </Link>
+                        <Link to="/upload">
+                            <Button variant="outline" className="gap-2.5 text-xs font-semibold tracking-[0.12em] uppercase px-5 py-3" style={{ fontFamily: sans, borderColor: "var(--border)", color: "var(--foreground)", borderRadius: 0, height: "auto" }}>
+                                <Upload className="size-4" /> Study a recording
+                            </Button>
+                        </Link>
                     </div>
-                )}
-            </div>
-
-            {/* Quick actions */}
-            <div className="mb-8">
-                <SectionRule label="Quick Access" />
-                <div className="flex flex-wrap gap-3">
-                    <Link to="/live">
-                        <Button
-                            className="gap-2.5 text-xs font-semibold tracking-[0.12em] uppercase px-5 py-3"
-                            style={{
-                                fontFamily: sans,
-                                backgroundColor: "var(--foreground)",
-                                color: "var(--background)",
-                                borderRadius: 0,
-                                height: "auto",
-                            }}
-                        >
-                            <Mic className="size-4" />
-                            Start Live Analysis
-                        </Button>
-                    </Link>
-                    <Link to="/upload">
-                        <Button
-                            variant="outline"
-                            className="gap-2.5 text-xs font-semibold tracking-[0.12em] uppercase px-5 py-3"
-                            style={{
-                                fontFamily: sans,
-                                borderColor: "var(--border)",
-                                color: "var(--foreground)",
-                                borderRadius: 0,
-                                height: "auto",
-                            }}
-                        >
-                            <Upload className="size-4" />
-                            Upload Audio File
-                        </Button>
-                    </Link>
+                </div>
+                <div className="border p-6 flex flex-col justify-between" style={{ borderColor: "var(--border)", backgroundColor: "var(--foreground)", color: "var(--background)" }}>
+                    <div>
+                        <p className="text-[11px] tracking-[0.22em] uppercase opacity-60" style={{ fontFamily: sans }}>A thought for today</p>
+                        {quote ? (
+                            <blockquote className="mt-8 text-2xl leading-tight" style={{ fontFamily: serif }}>
+                                “{quote.text}”
+                            </blockquote>
+                        ) : (
+                            <div className="mt-8 h-20" />
+                        )}
+                    </div>
+                    {quote && <p className="text-xs tracking-[0.12em] uppercase opacity-60 mt-8" style={{ fontFamily: sans }}>— {quote.author}</p>}
                 </div>
             </div>
 
-            {/* Stats */}
-            <div className="mb-8">
-                <SectionRule label="Session Statistics" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <StatBlock label="Total Sessions" value={totalSessions} sub="All time" />
-                    <StatBlock
-                        label="Total Duration"
-                        value={`${Math.round(totalDuration / 60)}m`}
-                        sub="Minutes analyzed"
-                    />
-                    <StatBlock
-                        label="Avg Confidence"
-                        value={`${(avgConfidence * 100).toFixed(1)}%`}
-                        sub="Average model confidence"
-                    />
-                </div>
+            {/* At-a-glance signal strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px mb-10 border" style={{ borderColor: "var(--border)", backgroundColor: "var(--border)" }}>
+                <div className="bg-background p-5"><StatBlock label="Sessions" value={totalSessions} sub="All time" /></div>
+                <div className="bg-background p-5"><StatBlock label="Listening time" value={`${Math.round(totalDuration / 60)}m`} sub="Analyzed audio" /></div>
+                <div className="bg-background p-5"><StatBlock label="Signal confidence" value={`${(avgConfidence * 100).toFixed(1)}%`} sub="Average model confidence" /></div>
             </div>
 
             {/* Charts */}

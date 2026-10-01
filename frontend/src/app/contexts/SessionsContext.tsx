@@ -9,6 +9,8 @@ import { useAuth } from "./AuthContext";
 interface SessionsContextType {
   /** Backend status, or null while unknown/unreachable. Drives status pills. */
   health: HealthResponse | null;
+  /** True while the initial backend health check is in flight. */
+  isCheckingHealth: boolean;
   /** True when the backend is serving randomised placeholder predictions. */
   isMock: boolean;
   isLoadingSessions: boolean;
@@ -21,6 +23,7 @@ const SessionsContext = createContext<SessionsContextType | undefined>(undefined
 export function SessionsProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(true);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
   // Health is public — checked regardless of auth so the UI can tell
@@ -31,7 +34,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         setHealth(h);
         verifyLabels(h);
       })
-      .catch(() => setHealth(null));
+      .catch(() => setHealth(null))
+      .finally(() => setIsCheckingHealth(false));
   }, []);
 
   const refreshSessions = useCallback(async () => {
@@ -56,6 +60,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     <SessionsContext.Provider
       value={{
         health,
+        isCheckingHealth,
         isMock: health?.mock_mode ?? false,
         isLoadingSessions,
         refreshSessions,

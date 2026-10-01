@@ -156,6 +156,40 @@ function WaveformBars({ active, level }: { active: boolean; level: number }) {
   );
 }
 
+function LatencyMonitor({
+  values,
+}: {
+  values: Partial<Record<"microphone" | "connection" | "preview-transcript" | "preview-emotion" | "final", number>>;
+}) {
+  const rows = [
+    ["Mic", values.microphone],
+    ["Connect", values.connection],
+    ["Preview text", values["preview-transcript"]],
+    ["Preview emotion", values["preview-emotion"]],
+    ["Final turn", values.final],
+  ] as const;
+  return (
+    <details className="border" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+      <summary className="cursor-pointer list-none px-4 py-3 text-xs text-muted-foreground" style={{ fontFamily: sans }}>
+        <span className="uppercase tracking-[0.16em]">Timing</span>
+        <span className="ml-3" style={{ fontFamily: mono }}>
+          {values.final == null ? "Waiting for a turn" : `Last turn ${Math.round(values.final)} ms`}
+        </span>
+      </summary>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-t px-4 py-3 sm:grid-cols-5" style={{ borderColor: "var(--border)" }}>
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-3 sm:block">
+            <div className="text-[10px] text-muted-foreground truncate" style={{ fontFamily: sans }}>{label}</div>
+            <div className="text-xs font-semibold" style={{ fontFamily: mono }}>
+              {value == null ? "--" : `${Math.round(value)} ms`}
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function getDominantWithScore(scores: { [key in Emotion]: number }) {
   const entries = Object.entries(scores) as [Emotion, number][];
   const dominant = entries.reduce((a, b) => (a[1] > b[1] ? a : b));
@@ -215,13 +249,14 @@ function RecentLiveSessions({ onViewSession }: { onViewSession?: (session: Sessi
 
 export function LiveRecording() {
   const navigate = useNavigate();
-  const { health, isMock, refreshSessions } = useSessions();
+  const { health, isMock, isCheckingHealth, refreshSessions } = useSessions();
   const [isRecording, setIsRecording] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [latency, setLatency] = useState<Partial<Record<"microphone" | "connection" | "preview-transcript" | "preview-emotion" | "final", number>>>({});
   // Endpointing state, pushed up from LiveSession's silence detector. Drives
   // the turn prompt so people know when to start and when they've finished.
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -258,9 +293,11 @@ export function LiveRecording() {
     isSubject: boolean;
   }[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const [viewedSession, setViewedSession] = useState<Session | null>(null);
 
   const sessionRef = useRef<LiveSession | null>(null);
+  const lastPreviewErrorRef = useRef<{ message: string; at: number } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(0);
@@ -295,11 +332,14 @@ export function LiveRecording() {
   // transcript is empty so navigating to the page doesn't yank the scroll
   // position down on mount.
   useEffect(() => {
-    if (transcript.length === 0) return;
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [transcript]);
+    if (transcript.length === 0 && !partialTranscript) return;
+    const container = transcriptScrollRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+  }, [transcript, partialTranscript]);
 
   const buildSession = () => new LiveSession({
+      onLatency: ({ kind, ms }) => setLatency((previous) => ({ ...previous, [kind]: ms })),
       onLevel: setLevel,
       onProcessing: (processing) => {
         setIsProcessing(processing);
@@ -414,7 +454,13 @@ export function LiveRecording() {
           setLastSpeaker(label);
         }
       },
-      onError: (message) => toast.error(message),
+      onError: (message) => {
+        const now = Date.now();
+        const previous = lastPreviewErrorRef.current;
+        if (previous && previous.message === message && now - previous.at < 2000) return;
+        lastPreviewErrorRef.current = { message, at: now };
+        toast.error(message);
+      },
     }, expectedSpeakers);
 
   const connectSession = async () => {
@@ -632,7 +678,7 @@ export function LiveRecording() {
         <div className="page-container">
           {/* Page header */}
           <div className="page-header" style={{ borderColor: "var(--border)" }}>
-            <div className="flex flex-wrap items-start justify-between gap-4">
+             <div className="w-full flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h1
                     className="font-bold text-foreground leading-tight"
@@ -644,14 +690,30 @@ export function LiveRecording() {
                 <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
                   Real-time audio-text fusion · attention-based multimodal analysis
                 </p>
-              </div>
-            </div>
+               </div>
+               {Object.keys(latency).length > 0 && (
+                   <div className="w-full max-w-sm lg:ml-auto lg:w-80">
+                     <LatencyMonitor values={latency} />
+                   </div>
+               )}
+             </div>
           </div>
 
           {/* Results shown here are only as real as the backend serving them —
               say so plainly rather than letting placeholders look like data. */}
-          {!backendReachable && (
-              <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#b8312f", backgroundColor: "var(--card)" }}>
+           {isCheckingHealth && (
+               <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "var(--primary)", backgroundColor: "var(--card)" }}>
+                 <p className="text-xs font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "var(--primary)", fontFamily: sans }}>
+                   Backend loading
+                 </p>
+                 <p className="text-xs text-muted-foreground flex items-center gap-2" style={{ fontFamily: sans }}>
+                   <span className="size-3 rounded-full border-2 border-primary/25 border-t-primary animate-spin" />
+                   Waking the analysis service and checking model readiness…
+                 </p>
+               </div>
+           )}
+           {!isCheckingHealth && !backendReachable && (
+               <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#b8312f", backgroundColor: "var(--card)" }}>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "#b8312f", fontFamily: sans }}>
                   Backend unreachable
                 </p>
@@ -699,9 +761,11 @@ export function LiveRecording() {
                             <span className="text-[11px] tracking-[0.14em] uppercase text-muted-foreground" style={{ fontFamily: sans }}>
                               Expected speakers
                             </span>
-                            <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
-                              {expectedSpeakers}
-                            </span>
+                             {expectedSpeakers > 1 && (
+                                 <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>
+                                   {expectedSpeakers}
+                                 </span>
+                             )}
                           </div>
                           <div className="grid grid-cols-4 gap-1.5">
                             {[1, 2, 3, 4].map((count) => (
@@ -830,12 +894,13 @@ export function LiveRecording() {
 
                     {/* Mic button */}
                     <div className="relative flex items-center justify-center mt-2">
-                      {isActive && (
+                     {isActive && (
                           <>
                             <div className="absolute size-28 opacity-10 animate-ping" style={{ backgroundColor: "var(--primary)", borderRadius: 0 }} />
                             <div className="absolute size-20 opacity-10" style={{ backgroundColor: "var(--primary)", borderRadius: 0, animation: "ping 1.4s ease-out 0.5s infinite" }} />
                           </>
-                      )}
+                     )}
+
                       <button
                           onClick={!isRecording && !isConnecting ? startRecording : undefined}
                           disabled={
@@ -1035,7 +1100,8 @@ export function LiveRecording() {
                     style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
                 >
                   <div
-                      className="min-h-[130px] max-h-48 overflow-y-auto border p-4 space-y-3"
+                       ref={transcriptScrollRef}
+                       className="min-h-[130px] max-h-48 overflow-y-auto border p-4 space-y-3"
                       style={{ borderColor: "var(--border)", backgroundColor: "var(--background)" }}
                   >
                     {transcript.length === 0 ? (
@@ -1228,6 +1294,7 @@ export function LiveRecording() {
                     </div>
                   </div>
               )}
+
             </div>
           </div>
         </div>

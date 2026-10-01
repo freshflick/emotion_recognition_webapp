@@ -261,9 +261,11 @@ def load_model(checkpoint_path: str, device: str = "cpu"):
             state["inference_biases"], device=_device, dtype=torch.float32
         )
     else:
-        # Manual bias: suppress Neutral, slightly boost others
+        # Manual bias: suppress Neutral, slightly boost expressive classes.
+        # Angry gets a modest extra offset because the fusion head otherwise
+        # tends to collapse high-arousal vocal delivery into Happy/Neutral.
         _biases = torch.tensor(
-            [-0.8, 0.2, 0.2, 0.2, 0.2], device=_device, dtype=torch.float32
+            [-0.8, 0.2, 0.2, 0.35, 0.2], device=_device, dtype=torch.float32
         )
 
 

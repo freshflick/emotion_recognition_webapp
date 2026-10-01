@@ -90,38 +90,3 @@
     background: var(--card);
   }
 }
-
-/* A dark navigation surface separates app structure from the warm/neutral
-   content canvas. The active colour still follows the selected accent. */
-:root,
-[data-accent] {
-  --sidebar: #1b2933;
-  --sidebar-foreground: #f3f7f8;
-  --sidebar-primary-foreground: #102027;
-  --sidebar-accent: #29414d;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(243, 247, 248, 0.12);
-}
-
-.dark,
-.dark[data-accent] {
-  --sidebar: #111c24;
-  --sidebar-foreground: #eff7f8;
-  --sidebar-accent: #203640;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(239, 247, 248, 0.12);
-}
-
-/* The violet accent is intentionally brighter on the dark navigation rail;
-   the regular page purple remains unchanged. */
-[data-accent="violet"]:not(.dark) {
-  --sidebar-primary: #b9a5ff;
-  --sidebar-primary-foreground: #171326;
-  --sidebar-ring: rgba(185, 165, 255, 0.55);
-}
-
-.dark[data-accent="violet"] {
-  --sidebar-primary: #c2b2ff;
-  --sidebar-primary-foreground: #171326;
-  --sidebar-ring: rgba(194, 178, 255, 0.55);
-}

@@ -250,13 +250,13 @@
   --input-background: #ebe5da;
   --switch-background: #c0b0a0;
   --ring: rgba(96, 64, 200, 0.4);
-  --sidebar: #ede8de;
-  --sidebar-foreground: #18120a;
+  --sidebar: #18120a;
+  --sidebar-foreground: #faf7f2;
   --sidebar-primary: #6040c8;
   --sidebar-primary-foreground: #faf7f2;
-  --sidebar-accent: #e4ddd0;
-  --sidebar-accent-foreground: #18120a;
-  --sidebar-border: rgba(24, 18, 10, 0.12);
+  --sidebar-accent: #30271c;
+  --sidebar-accent-foreground: #faf7f2;
+  --sidebar-border: rgba(250, 247, 242, 0.14);
   --sidebar-ring: rgba(96, 64, 200, 0.4);
 }
 .dark[data-accent="violet"] {
@@ -541,8 +541,11 @@
   --secondary: #e4efe8;
   --muted: #e8f1eb;
   --input-background: #e4efe8;
-  --sidebar: #eaf4ee;
-  --sidebar-accent: #dcece3;
+  --sidebar: #0d2b20;
+  --sidebar-foreground: #effcf5;
+  --sidebar-accent: #174c38;
+  --sidebar-accent-foreground: #effcf5;
+  --sidebar-border: rgba(239, 252, 245, 0.16);
 }
 
 [data-accent="blue"]:not(.dark) {
@@ -552,8 +555,11 @@
   --secondary: #e5ebf5;
   --muted: #e9eef7;
   --input-background: #e5ebf5;
-  --sidebar: #ebf1f9;
-  --sidebar-accent: #dfe8f5;
+  --sidebar: #0f1e40;
+  --sidebar-foreground: #f1f5ff;
+  --sidebar-accent: #1b3568;
+  --sidebar-accent-foreground: #f1f5ff;
+  --sidebar-border: rgba(241, 245, 255, 0.16);
 }
 
 [data-accent="orange"]:not(.dark) {
@@ -563,8 +569,11 @@
   --secondary: #f1e6d8;
   --muted: #f6eadc;
   --input-background: #f1e6d8;
-  --sidebar: #f7eee4;
-  --sidebar-accent: #f1e2d1;
+  --sidebar: #2a1200;
+  --sidebar-foreground: #fff7ed;
+  --sidebar-accent: #593016;
+  --sidebar-accent-foreground: #fff7ed;
+  --sidebar-border: rgba(255, 247, 237, 0.16);
 }
 
 [data-accent="red"]:not(.dark) {
@@ -574,8 +583,11 @@
   --secondary: #f0e1df;
   --muted: #f6e8e6;
   --input-background: #f0e1df;
-  --sidebar: #f7eae8;
-  --sidebar-accent: #f0dedd;
+  --sidebar: #2a0808;
+  --sidebar-foreground: #fff5f5;
+  --sidebar-accent: #5c1d1d;
+  --sidebar-accent-foreground: #fff5f5;
+  --sidebar-border: rgba(255, 245, 245, 0.16);
 }
 
 [data-accent="amber"]:not(.dark) {
@@ -585,8 +597,11 @@
   --secondary: #eee7cb;
   --muted: #f3ecd3;
   --input-background: #eee7cb;
-  --sidebar: #f5efd9;
-  --sidebar-accent: #ebe2c2;
+  --sidebar: #1c1200;
+  --sidebar-foreground: #fffbea;
+  --sidebar-accent: #4d3910;
+  --sidebar-accent-foreground: #fffbea;
+  --sidebar-border: rgba(255, 251, 234, 0.16);
 }
 
 /* Keep light-theme typography and dividers editorial and neutral. */

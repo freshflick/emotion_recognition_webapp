@@ -38,17 +38,6 @@ const mono = "'IBM Plex Mono', monospace";
 
 type TimeRange = "week" | "month" | "quarter" | "year";
 
-function SectionRule({ label }: { label: string }) {
-  return (
-      <div className="flex items-center gap-3 mb-5">
-      <span className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-normal" style={{ fontFamily: sans }}>
-        — {label}
-      </span>
-        <div className="flex-1 border-t" style={{ borderColor: "var(--border)" }} />
-      </div>
-  );
-}
-
 function ChartShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
       <div>
@@ -170,6 +159,10 @@ export function Analytics() {
           totalSessions
           : 0;
   const totalDuration = filteredSessions.reduce((sum, s) => sum + s.duration, 0);
+  const dominantShare = totalSessions > 0 && dominantEmotion
+      ? (dominantEmotion[1] / totalSessions) * 100
+      : 0;
+  const rankedEmotions = Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]);
 
   const tooltipStyle = {
     background: "var(--card)", border: "1px solid var(--border)", borderRadius: 0,
@@ -182,63 +175,100 @@ export function Analytics() {
       <div className="page-shell">
         <div className="page-container">
 
-        {/* Header */}
-        <div className="page-header" style={{ borderColor: "var(--border)" }}>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <h1
-                className="font-bold text-foreground leading-tight"
-                style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}
-            >
-              Emotion <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Analytics</em>
-            </h1>
+        {/* Analytics masthead */}
+        <div className="border-b pb-6 mb-8" style={{ borderColor: "var(--border)" }}>
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div>
+              <p className="text-[11px] tracking-[0.24em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>Signal report / selected period</p>
+              <h1 className="font-bold text-foreground leading-tight" style={{ fontFamily: serif, fontSize: "clamp(1.75rem, 3vw, 2.5rem)", letterSpacing: "-0.02em" }}>
+                Emotion <em style={{ fontStyle: "italic", color: "var(--primary)" }}>Analytics</em>
+              </h1>
+              <p className="text-sm text-muted-foreground mt-4 max-w-xl" style={{ fontFamily: sans, fontWeight: 300 }}>
+                Find the emotional climate across your conversations, then trace how it changes over time.
+              </p>
+            </div>
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-              <SelectTrigger
-                  className="w-36 border text-xs font-normal"
-                  style={{ borderColor: "var(--border)", borderRadius: 0, fontFamily: sans, letterSpacing: "0.06em" }}
-              >
+              <SelectTrigger className="w-40 border text-xs font-semibold uppercase tracking-[0.1em]" style={{ borderColor: "var(--border)", borderRadius: 0, fontFamily: sans }}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent style={{ borderRadius: 0, fontFamily: sans }}>
-                <SelectItem value="week">Last Week</SelectItem>
-                <SelectItem value="month">Last Month</SelectItem>
-                <SelectItem value="quarter">Last Quarter</SelectItem>
-                <SelectItem value="year">Last Year</SelectItem>
+                <SelectItem value="week">Last week</SelectItem>
+                <SelectItem value="month">Last month</SelectItem>
+                <SelectItem value="quarter">Last quarter</SelectItem>
+                <SelectItem value="year">Last year</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <p className="text-sm text-muted-foreground mt-1.5" style={{ fontFamily: sans, fontWeight: 300 }}>
-             Review emotion distribution and trends across your sessions.
-          </p>
         </div>
 
-        {/* Summary stats */}
-        <div className="mb-8">
-          <SectionRule label="Period Summary" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        {/* High-signal summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6 mb-10">
+          <div className="border p-6 sm:p-8" style={{ borderColor: "var(--border)", backgroundColor: "var(--foreground)", color: "var(--background)" }}>
+            <p className="text-[11px] uppercase tracking-[0.22em] opacity-60" style={{ fontFamily: sans }}>Dominant signal</p>
+            <div className="mt-10 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-4xl sm:text-5xl font-bold capitalize leading-none" style={{ fontFamily: serif, color: dominantEmotion ? EMOTION_COLORS[dominantEmotion[0] as Emotion] : "var(--background)" }}>
+                  {dominantEmotion ? dominantEmotion[0] : "No data"}
+                </p>
+                <p className="text-xs opacity-60 mt-3" style={{ fontFamily: sans }}>
+                  {dominantEmotion ? `${dominantEmotion[1]} of ${totalSessions} sessions` : "Record a session to create a profile"}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold" style={{ fontFamily: mono }}>{dominantShare.toFixed(0)}%</p>
+                <p className="text-[10px] uppercase tracking-[0.16em] opacity-60 mt-1" style={{ fontFamily: sans }}>of period</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-px border" style={{ borderColor: "var(--border)", backgroundColor: "var(--border)" }}>
             {[
-              { label: "Total Sessions", value: totalSessions, sub: "In selected period" },
-              {
-                label: "Dominant Emotion",
-                value: dominantEmotion ? dominantEmotion[0] : "N/A",
-                sub: dominantEmotion ? `${dominantEmotion[1]} occurrences` : "No data",
-                color: dominantEmotion ? EMOTION_COLORS[dominantEmotion[0] as Emotion] : undefined,
-              },
-              { label: "Avg Confidence", value: `${(avgConfidence * 100).toFixed(1)}%`, sub: "Model accuracy" },
-              { label: "Total Duration", value: `${Math.round(totalDuration / 60)}m`, sub: "Minutes analyzed" },
-            ].map(({ label, value, sub, color }) => (
-                <div key={label} className="border-l-2 pl-4 py-1" style={{ borderColor: "var(--border)" }}>
-                  <p className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground font-normal mb-1" style={{ fontFamily: sans }}>
-                    {label}
-                  </p>
-                  <div
-                      className="text-2xl font-bold leading-none mb-1 capitalize"
-                      style={{ fontFamily: serif, letterSpacing: "-0.02em", color: color || "var(--foreground)" }}
-                  >
-                    {value}
-                  </div>
-                  <p className="text-xs text-muted-foreground font-normal" style={{ fontFamily: sans }}>{sub}</p>
+              ["Sessions", totalSessions, "In selected period"],
+              ["Listening time", `${Math.round(totalDuration / 60)}m`, "Minutes analyzed"],
+              ["Confidence", `${(avgConfidence * 100).toFixed(1)}%`, "Average model confidence"],
+              ["Emotions tracked", intensityCount, "Analyzed data points"],
+            ].map(([label, value, sub]) => (
+                <div key={label} className="bg-background p-5 sm:p-6">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground" style={{ fontFamily: sans }}>{label}</p>
+                  <p className="text-2xl font-bold mt-3" style={{ fontFamily: serif }}>{value}</p>
+                  <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: sans }}>{sub}</p>
                 </div>
             ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_0.8fr] gap-6 mb-10">
+          <div className="border p-5 sm:p-6" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+            <div className="flex items-end justify-between mb-5">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground" style={{ fontFamily: sans }}>Period composition</p>
+                <p className="text-sm text-muted-foreground mt-1" style={{ fontFamily: sans }}>Share of dominant session signals</p>
+              </div>
+              <span className="text-xs text-muted-foreground" style={{ fontFamily: mono }}>{totalSessions} total</span>
+            </div>
+            <div className="space-y-4">
+              {rankedEmotions.map(([emotion, count]) => {
+                const share = totalSessions ? (count / totalSessions) * 100 : 0;
+                return (
+                    <div key={emotion}>
+                      <div className="flex justify-between mb-1.5 text-xs capitalize" style={{ fontFamily: sans }}>
+                        <span>{emotion}</span><span className="text-muted-foreground" style={{ fontFamily: mono }}>{share.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-2" style={{ backgroundColor: "var(--muted)" }}><div className="h-full transition-all" style={{ width: `${share}%`, backgroundColor: EMOTION_COLORS[emotion as Emotion] }} /></div>
+                    </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="border p-2" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={pieChartData} cx="50%" cy="47%" innerRadius={58} outerRadius={86} paddingAngle={3} dataKey="value">
+                  {pieChartData.map((entry, index) => <Cell key={`summary-pie-${index}`} fill={entry.color} />)}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: 10, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.06em" }} />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
