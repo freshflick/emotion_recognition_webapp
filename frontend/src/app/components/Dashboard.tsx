@@ -10,6 +10,7 @@ import { useUser } from "../contexts/UserContext";
 import { getTimeBasedGreeting, getSessionQuote } from "../utils/userProfile";
 import { useSessionStore } from "../utils/emotionEngine";
 import type { Emotion } from "../utils/emotionEngine";
+import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
     happy: "#c07c20",
@@ -167,7 +168,10 @@ export function Dashboard() {
                     </div>
                     {quote && <p className="text-xs tracking-[0.12em] uppercase opacity-60 mt-8" style={{ fontFamily: sans }}>— {quote.author}</p>}
                 </div>
+
             </div>
+
+            <SessionLoadingIndicator />
 
             {/* At-a-glance signal strip */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-px mb-10 border" style={{ borderColor: "var(--border)", backgroundColor: "var(--border)" }}>

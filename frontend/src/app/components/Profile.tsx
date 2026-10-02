@@ -10,6 +10,7 @@ import { useUser } from "../contexts/UserContext";
 import { toast } from "sonner";
 import { useSessionStore } from "../utils/emotionEngine";
 import { supabase } from "../lib/supabase";
+import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
@@ -147,6 +148,8 @@ export function Profile() {
             Manage your personal information and account settings.
           </p>
         </div>
+
+        <SessionLoadingIndicator />
 
         {/* Profile Information */}
         <Card className="rounded-none shadow-none border mb-6" style={cardStyle}>

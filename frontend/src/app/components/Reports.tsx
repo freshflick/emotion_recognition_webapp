@@ -18,6 +18,7 @@ import {
 import { removeSessions, useSessionStore, type Emotion } from "../utils/emotionEngine";
 import { deleteReports } from "../api/client";
 import { toast } from "sonner";
+import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -298,6 +299,8 @@ export function Reports() {
               Generate detailed emotion analysis reports from multimodal data
             </p>
           </div>
+
+          <SessionLoadingIndicator />
 
           {/* Date Range Component Box */}
           <div
