@@ -641,7 +641,7 @@ export function LiveRecording() {
     } else {
       toast.warning("Analysis complete, but it could not be saved to the server");
     }
-    setTimeout(() => navigate("/"), 1500);
+    setTimeout(() => navigate("/analytics"), 1500);
   };
 
   const chartData = emotionData.slice(-20).map((data) => ({

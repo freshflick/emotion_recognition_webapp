@@ -134,7 +134,7 @@ export function Dashboard() {
                 <div className="relative overflow-hidden border p-7 sm:p-10" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                     <div className="absolute -right-10 -top-16 text-[13rem] leading-none font-bold select-none pointer-events-none" style={{ color: "var(--accent)", fontFamily: serif, opacity: 0.65 }}>∿</div>
                     <p className="text-[11px] tracking-[0.24em] uppercase text-muted-foreground mb-5" style={{ fontFamily: sans }}>Emotion monitor / overview</p>
-                    <h1 className="relative font-bold text-foreground leading-[0.95] max-w-2xl" style={{ fontFamily: serif, fontSize: "clamp(2.2rem, 4.6vw, 4rem)", letterSpacing: "-0.045em" }}>
+                    <h1 className="relative max-w-full font-bold text-foreground leading-[0.98] break-all sm:break-words" style={{ fontFamily: serif, fontSize: "clamp(2rem, 4.2vw, 3.25rem)", letterSpacing: "-0.045em", overflowWrap: "anywhere" }}>
                         {greeting},<br />
                         <em style={{ color: "var(--primary)", fontStyle: "italic" }}>{user.name}.</em>
                     </h1>
@@ -154,7 +154,7 @@ export function Dashboard() {
                         </Link>
                     </div>
                 </div>
-                <div className="border p-6 flex flex-col justify-between" style={{ borderColor: "var(--border)", backgroundColor: "var(--foreground)", color: "var(--background)" }}>
+                <div className="border p-6 flex flex-col justify-between" style={{ borderColor: "var(--border)", backgroundColor: "#ddd7e4", color: "#24180c" }}>
                     <div>
                         <p className="text-[11px] tracking-[0.22em] uppercase opacity-60" style={{ fontFamily: sans }}>A thought for today</p>
                         {quote ? (
