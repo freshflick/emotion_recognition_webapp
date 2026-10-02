@@ -66,7 +66,9 @@ export function Login() {
       toast.error("Enter your email address first");
       return;
     }
-    const { error } = await supabase!.auth.resetPasswordForEmail(email);
+    const { error } = await supabase!.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
     if (error) toast.error(error.message);
     else toast.success("Password reset link sent — check your email.");
   };

@@ -8,6 +8,7 @@ import { Analytics } from "./components/Analytics";
 import { Settings } from "./components/Settings";
 import { Profile } from "./components/Profile";
 import { Login } from "./components/Login";
+import { ResetPassword } from "./components/ResetPassword";
 import { useAuth } from "./contexts/AuthContext";
 
 // Restoring a Supabase session is asynchronous. Without this gate, a page
@@ -22,21 +23,34 @@ function AuthPending() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isRecoverySession } = useAuth();
   if (isLoading) return <AuthPending />;
+  if (isRecoverySession) return <Navigate to="/reset-password" replace />;
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function RedirectIfAuthed() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isRecoverySession } = useAuth();
   if (isLoading) return <AuthPending />;
+  if (isRecoverySession) return <Navigate to="/reset-password" replace />;
   return isAuthenticated ? <Navigate to="/" replace /> : <Login />;
+}
+
+function RecoveryRoute() {
+  const { isLoading, isAuthenticated, isRecoverySession } = useAuth();
+  if (isLoading) return <AuthPending />;
+  if (!isAuthenticated || !isRecoverySession) return <Navigate to="/login" replace />;
+  return <ResetPassword />;
 }
 
 export const router = createBrowserRouter([
   {
     path: "/login",
     Component: RedirectIfAuthed,
+  },
+  {
+    path: "/reset-password",
+    Component: RecoveryRoute,
   },
   {
     path: "/",

@@ -11,6 +11,8 @@ interface AuthContextType {
   isDevMode: boolean;
   /** True once password is right but a TOTP code is still needed. */
   mfaRequired: boolean;
+  /** True while Supabase has granted a password-recovery session. */
+  isRecoverySession: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
@@ -26,6 +28,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SupabaseSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mfaRequired, setMfaRequired] = useState(false);
+  const [isRecoverySession, setIsRecoverySession] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("type") === "recovery" || window.location.hash.includes("type=recovery");
+  });
 
   const [devAuthed, setDevAuthed] = useState(
       () => localStorage.getItem(DEV_AUTH_KEY) === "true",
@@ -59,12 +66,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch(() => {})
         .finally(() => setIsLoading(false));
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
+
+      if (event === "PASSWORD_RECOVERY") setIsRecoverySession(true);
 
       if (!next) {
         clearSessions();
         setMfaRequired(false);
+        setIsRecoverySession(false);
         return;
       }
 
@@ -155,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: isSupabaseConfigured ? (session?.user.email ?? null) : devEmail,
     isDevMode: !isSupabaseConfigured,
     mfaRequired,
+    isRecoverySession,
     signIn,
     signUp,
     signOut,
