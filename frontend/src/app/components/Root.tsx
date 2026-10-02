@@ -84,8 +84,7 @@ export function Root() {
                                 — Est. 2026
                             </span>
                             <div className="text-2xl font-bold leading-tight" style={{ color: "var(--sidebar-foreground)", fontFamily: "'Playfair Display', Georgia, serif", letterSpacing: "-0.01em" }}>
-                                Emotion<br />
-                                <span className="italic" style={{ color: "var(--primary)" }}>Monitor</span>
+                                Emphona
                             </div>
                         </div>
                     )}
@@ -207,7 +206,7 @@ export function Root() {
             <div className="flex min-w-0 flex-1 flex-col">
                 <header className="flex lg:hidden items-center justify-between gap-4 border-b px-4 py-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                     <Link to="/" className="min-w-0" style={{ color: "var(--foreground)" }}>
-                        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Emotion Monitor</span>
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Emphona</span>
                         <span className="block truncate text-sm font-semibold" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{pageLabel}</span>
                     </Link>
                     <Link to="/settings" aria-label="Open settings" className="flex size-9 shrink-0 items-center justify-center border" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}>

@@ -21,11 +21,22 @@ import storage
 
 
 FALLBACK_QUOTES = [
-    {"text": "Take a moment to reflect on how you're feeling.", "author": "Unknown"},
-    {"text": "Understanding your emotions is the first step to understanding yourself.", "author": "Unknown"},
+    {"text": "Take a moment to reflect on how you're feeling.", "author": "Emphona"},
+    {"text": "Understanding your emotions is the first step to understanding yourself.", "author": "Emphona"},
 ]
 QUOTE_API_URL = "https://zenquotes.io/api/random"
 _quote_cache: dict = {"quote": None, "date": None}
+
+
+def _normalise_quote(value: dict | None) -> dict:
+    fallback = random.choice(FALLBACK_QUOTES)
+    if not isinstance(value, dict):
+        return fallback
+    text = value.get("text") or value.get("q")
+    author = value.get("author") or value.get("a")
+    if not isinstance(text, str) or not text.strip() or not isinstance(author, str) or not author.strip():
+        return fallback
+    return {"text": text.strip(), "author": author.strip()}
 
 app = FastAPI(title="Emotion Monitor Control API")
 app.add_middleware(
@@ -62,7 +73,7 @@ async def quote():
                 response = await client.get(QUOTE_API_URL)
                 response.raise_for_status()
                 data = response.json()
-                _quote_cache["quote"] = {"text": data[0]["q"], "author": data[0]["a"]}
+                _quote_cache["quote"] = _normalise_quote(data[0] if data else None)
         except Exception:
             _quote_cache["quote"] = random.choice(FALLBACK_QUOTES)
         _quote_cache["date"] = today

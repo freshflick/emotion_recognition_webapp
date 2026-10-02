@@ -1,4 +1,4 @@
-# EmotionMonitor
+# Emphona
 
 Multimodal speech emotion recognition — a React frontend talking to a FastAPI
 backend that serves a trained audio+text fusion model, with Supabase for auth

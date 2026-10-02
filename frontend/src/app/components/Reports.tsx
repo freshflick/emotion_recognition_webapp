@@ -182,7 +182,7 @@ export function Reports() {
   const generatePDFReport = () => {
     const doc = new jsPDF();
     doc.setFontSize(20);
-    doc.text("Emotion Monitoring Report", 20, 20);
+    doc.text("Emphona Monitoring Report", 20, 20);
     doc.setFontSize(12);
     doc.text(`Range: ${getShowingText()}`, 20, 30);
     doc.text(`Items Included: ${targetExportSessions.length} sessions`, 20, 37);

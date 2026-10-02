@@ -46,7 +46,7 @@ export function updateUser(updates: Partial<UserProfile>): UserProfile {
 // so this only ever shows when things are more broadly degraded.
 const OFFLINE_FALLBACK_QUOTE = {
   text: "Take a moment to reflect on how you're feeling.",
-  author: "EmotionMonitor",
+  author: "Emphona",
 };
 
 function normalizeQuote(value: Partial<{ text: string; author: string }> | null | undefined) {
@@ -61,14 +61,14 @@ const QUOTE_STORAGE_KEY = "emotionmonitor_session_quote";
 // One quote per day — matches the backend's own per-calendar-day cache, so
 // this is purely to avoid an extra network round-trip on every page load
 // within the same day, not a second source of "freshness".
-const QUOTE_CACHE_MS = 24 * 60 * 60 * 1000;
+const quoteDate = () => new Date().toISOString().slice(0, 10);
 
 export async function getSessionQuote(): Promise<{ text: string; author: string }> {
   const stored = localStorage.getItem(QUOTE_STORAGE_KEY);
   if (stored) {
     try {
       const data = JSON.parse(stored);
-      if (Date.now() - data.timestamp < QUOTE_CACHE_MS) {
+      if (data.date === quoteDate()) {
         return normalizeQuote(data.quote);
       }
     } catch {
@@ -92,7 +92,7 @@ export async function getSessionQuote(): Promise<{ text: string; author: string 
 
   localStorage.setItem(
       QUOTE_STORAGE_KEY,
-      JSON.stringify({ quote, timestamp: Date.now() })
+       JSON.stringify({ quote, date: quoteDate() })
   );
   return quote;
 }

@@ -34,8 +34,8 @@ MAX_SUBJECT_SAMPLE_BYTES = 10 * 1024 * 1024
 # generic rather than duplicating the frontend's full quote list, since
 # this only fires in a rare "everything is degraded" case.
 FALLBACK_QUOTES = [
-    {"text": "Take a moment to reflect on how you're feeling.", "author": "Unknown"},
-    {"text": "Understanding your emotions is the first step to understanding yourself.", "author": "Unknown"},
+    {"text": "Take a moment to reflect on how you're feeling.", "author": "Emphona"},
+    {"text": "Understanding your emotions is the first step to understanding yourself.", "author": "Emphona"},
 ]
 
 # --- Quote of the day ---
@@ -49,13 +49,24 @@ QUOTE_API_URL = "https://zenquotes.io/api/random"
 
 _quote_cache: dict = {"quote": None, "date": None}
 
+
+def _normalise_quote(value: dict | None) -> dict:
+    fallback = random.choice(FALLBACK_QUOTES)
+    if not isinstance(value, dict):
+        return fallback
+    text = value.get("text") or value.get("q")
+    author = value.get("author") or value.get("a")
+    if not isinstance(text, str) or not text.strip() or not isinstance(author, str) or not author.strip():
+        return fallback
+    return {"text": text.strip(), "author": author.strip()}
+
 async def _fetch_quote_from_api() -> dict:
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.get(QUOTE_API_URL)
         resp.raise_for_status()
         data = resp.json()
         # ZenQuotes wraps a single result in a one-item array: [{"q": ..., "a": ...}]
-        return {"text": data[0]["q"], "author": data[0]["a"]}
+        return _normalise_quote(data[0] if data else None)
     return None
 
 @asynccontextmanager

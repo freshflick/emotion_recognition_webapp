@@ -117,7 +117,7 @@ export function Login() {
                 <Activity className="size-5 text-background" />
               </div>
               <span className="font-bold text-lg tracking-tight" style={{ fontFamily: serif }}>
-              Emotion<span className="italic opacity-80">Monitor</span>
+              Emphona
             </span>
             </div>
             <span className="text-[11px] font-mono tracking-widest uppercase opacity-60" style={{ fontFamily: mono }}>
@@ -156,7 +156,7 @@ export function Login() {
               <div className="p-1.5 bg-foreground text-background">
                 <Activity className="size-4" />
               </div>
-              <span className="font-bold text-foreground" style={{ fontFamily: serif }}>EmotionMonitor</span>
+              <span className="font-bold text-foreground" style={{ fontFamily: serif }}>Emphona</span>
             </div>
 
             {/* Form Title Header */}
@@ -316,7 +316,7 @@ export function Login() {
 
           {/* Footer info for right panel */}
           <div className="text-center text-[11px] font-mono text-muted-foreground" style={{ fontFamily: mono }}>
-            © 2026 EmotionMonitor Inc.
+            © 2026 Emphona
           </div>
         </div>
       </div>

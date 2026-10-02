@@ -12,21 +12,28 @@ declare global {
 }
 
 const runtime = typeof window !== "undefined" ? window.__EMOTION_CONFIG__ : undefined;
-const buildTime = {
-  backendOrigin: import.meta.env.VITE_BACKEND_ORIGIN ?? "",
-  controlOrigin: import.meta.env.VITE_CONTROL_ORIGIN ?? "",
-  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? "",
-  supabasePublishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
-};
+const buildTime = import.meta.env.DEV
+  ? {
+      backendOrigin: import.meta.env.VITE_BACKEND_ORIGIN ?? "",
+      controlOrigin: import.meta.env.VITE_CONTROL_ORIGIN ?? "",
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? "",
+      supabasePublishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
+    }
+  : {};
+
+// The Worker always serves config.js. Its presence is authoritative, even if
+// a variable is temporarily missing; never fall back to a developer's local
+// .env values in a deployed Worker.
+const config = runtime ?? buildTime;
 
 export const BACKEND_ORIGIN = (
-  runtime?.backendOrigin ?? buildTime?.backendOrigin ?? ""
+  config.backendOrigin ?? ""
 ).replace(/\/$/, "");
 
 export const CONTROL_ORIGIN = (
-  runtime?.controlOrigin ?? buildTime?.controlOrigin ?? BACKEND_ORIGIN
+  config.controlOrigin ?? BACKEND_ORIGIN
 ).replace(/\/$/, "");
 
-export const SUPABASE_URL = runtime?.supabaseUrl ?? buildTime?.supabaseUrl ?? "";
+export const SUPABASE_URL = config.supabaseUrl ?? "";
 export const SUPABASE_PUBLISHABLE_KEY =
-  runtime?.supabasePublishableKey ?? buildTime?.supabasePublishableKey ?? "";
+  config.supabasePublishableKey ?? "";
