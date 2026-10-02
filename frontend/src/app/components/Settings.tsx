@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { useTheme } from "next-themes";
 import { Check, Sun, Moon, Monitor, ShieldCheck, ShieldOff } from "lucide-react";
 import { useAccent, type AccentColor } from "../contexts/AccentContext";
@@ -15,6 +16,7 @@ import {
   DialogDescription,
 } from "./ui/dialog";
 import { useUser } from "../contexts/UserContext";
+import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
 import {supabase} from "../lib/supabase.ts";
 
@@ -23,6 +25,8 @@ const sans = "'IBM Plex Sans', system-ui, sans-serif";
 const mono = "'IBM Plex Mono', monospace";
 
 export function Settings() {
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
   const { user } = useUser();
   const { theme, setTheme } = useTheme();
   const { accent, setAccent } = useAccent();
@@ -77,6 +81,8 @@ export function Settings() {
         toast.error(error.message);
       } else {
         toast.success("Password changed successfully");
+        await signOut();
+        navigate("/login", { replace: true });
       }
     } catch (error) {
       toast.error("An unexpected error occurred");
