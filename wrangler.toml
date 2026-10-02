@@ -2,7 +2,17 @@ name = "emotion-recognition-webapp"
 main = "worker/index.js"
 compatibility_date = "2026-10-01"
 
+routes = [
+  { pattern = "emphona.app/*", zone_name = "emphona.app" }
+]
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+[vars]
+VITE_BACKEND_ORIGIN = "https://freshflick--emotion-monitor-backend-fastapi-app.modal.run"
+VITE_CONTROL_ORIGIN = "https://freshflick--emotion-monitor-backend-control-api.modal.run"
+VITE_SUPABASE_URL = "https://izwqcpcqarslwmusthxj.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_alq43CMhGC5IuTy0nZEB4Q_Z9WupW3X"
