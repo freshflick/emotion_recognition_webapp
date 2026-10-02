@@ -154,7 +154,7 @@ export function Dashboard() {
                         </Link>
                     </div>
                 </div>
-                <div className="border p-6 flex flex-col justify-between" style={{ borderColor: "var(--border)", backgroundColor: "#ddd7e4", color: "#24180c" }}>
+                <div className="border p-6 flex flex-col justify-between" style={{ borderColor: "var(--border)", backgroundColor: "color-mix(in srgb, var(--primary) 13%, var(--background))", color: "var(--foreground)" }}>
                     <div>
                         <p className="text-[11px] tracking-[0.22em] uppercase opacity-60" style={{ fontFamily: sans }}>A thought for today</p>
                         {quote ? (

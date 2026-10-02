@@ -45,7 +45,9 @@ ALLOWED_ORIGINS = [
 ]
 
 # --- Whisper (speech-to-text, feeds the text branch of your fusion model) ---
-WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small.en")  # tiny.en/base.en/small.en/medium.en
+# Use the larger final model for upload and completed-turn transcripts. The
+# preview model remains lightweight so live captions stay responsive.
+WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "medium.en")  # tiny.en/base.en/small.en/medium.en
 # A separate lightweight model keeps partial captions responsive while the
 # larger model remains responsible for the final sentence transcript.
 WHISPER_PREVIEW_MODEL_SIZE = os.getenv("WHISPER_PREVIEW_MODEL_SIZE", "base.en")
