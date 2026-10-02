@@ -24,12 +24,21 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useSessionStore, type Emotion } from "../utils/emotionEngine";
+import { useSessions } from "../contexts/SessionsContext";
+import { Loader2 } from "lucide-react";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
-  happy: "#c07c20",
-  sad: "#1e5f8a",
-  angry: "#b8312f",
-  neutral: "#786c5c",
+  happy: "#f59e0b",
+  sad: "#38bdf8",
+  angry: "#fb7185",
+  neutral: "#a78bfa",
+};
+
+const EMOTION_CARD_BACKGROUNDS: { [key in Emotion]: string } = {
+  happy: "#ffd166",
+  sad: "#8ee7ff",
+  angry: "#ff9eaa",
+  neutral: "#d5c2ff",
 };
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -54,6 +63,7 @@ function ChartShell({ title, children }: { title: string; children: React.ReactN
 export function Analytics() {
   const [timeRange, setTimeRange] = useState<TimeRange>("week");
   const sessions = useSessionStore();
+  const { isLoadingSessions } = useSessions();
 
   // Filter sessions by time range
   const filterByTimeRange = (range: TimeRange) => {
@@ -176,7 +186,7 @@ export function Analytics() {
         <div className="page-container">
 
         {/* Analytics masthead */}
-        <div className="border-b pb-6 mb-8" style={{ borderColor: "var(--border)" }}>
+         <div className="border-b pb-6 mb-8" style={{ borderColor: "var(--border)" }}>
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div>
               <p className="text-[11px] tracking-[0.24em] uppercase text-muted-foreground mb-3" style={{ fontFamily: sans }}>Signal report / selected period</p>
@@ -198,16 +208,23 @@ export function Analytics() {
                 <SelectItem value="year">Last year</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
+           </div>
+         </div>
+
+         {isLoadingSessions && (
+           <div className="mb-8 flex items-center gap-3 border px-4 py-3 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)", color: "var(--accent-foreground)", fontFamily: sans }}>
+             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+             <span>Loading your emotional history...</span>
+           </div>
+         )}
 
         {/* High-signal summary */}
         <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6 mb-10">
-          <div className="border p-6 sm:p-8" style={{ borderColor: "var(--border)", backgroundColor: "var(--foreground)", color: "var(--background)" }}>
+           <div className="border p-6 sm:p-8" style={{ borderColor: "var(--border)", backgroundColor: dominantEmotion ? EMOTION_CARD_BACKGROUNDS[dominantEmotion[0] as Emotion] : "var(--foreground)", color: dominantEmotion ? "#24180c" : "var(--background)" }}>
             <p className="text-[11px] uppercase tracking-[0.22em] opacity-60" style={{ fontFamily: sans }}>Dominant signal</p>
             <div className="mt-10 flex items-end justify-between gap-4">
               <div>
-                <p className="text-4xl sm:text-5xl font-bold capitalize leading-none" style={{ fontFamily: serif, color: dominantEmotion ? EMOTION_COLORS[dominantEmotion[0] as Emotion] : "var(--background)" }}>
+                 <p className="text-4xl sm:text-5xl font-bold capitalize leading-none" style={{ fontFamily: serif, color: dominantEmotion ? "#24180c" : "var(--background)" }}>
                   {dominantEmotion ? dominantEmotion[0] : "No data"}
                 </p>
                 <p className="text-xs opacity-60 mt-3" style={{ fontFamily: sans }}>
@@ -226,8 +243,8 @@ export function Analytics() {
               ["Listening time", `${Math.round(totalDuration / 60)}m`, "Minutes analyzed"],
               ["Confidence", `${(avgConfidence * 100).toFixed(1)}%`, "Average model confidence"],
               ["Emotions tracked", intensityCount, "Analyzed data points"],
-            ].map(([label, value, sub]) => (
-                <div key={label} className="bg-background p-5 sm:p-6">
+            ].map(([label, value, sub], index) => (
+                 <div key={label} className="p-5 sm:p-6" style={{ backgroundColor: EMOTION_CARD_BACKGROUNDS[(["happy", "sad", "angry", "neutral"] as Emotion[])[index % 4]], color: "#24180c" }}>
                   <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground" style={{ fontFamily: sans }}>{label}</p>
                   <p className="text-2xl font-bold mt-3" style={{ fontFamily: serif }}>{value}</p>
                   <p className="text-xs text-muted-foreground mt-1" style={{ fontFamily: sans }}>{sub}</p>
