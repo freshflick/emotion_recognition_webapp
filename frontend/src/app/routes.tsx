@@ -1,4 +1,5 @@
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, useLocation } from "react-router";
+import { useEffect } from "react";
 import { Root } from "./components/Root";
 import { Dashboard } from "./components/Dashboard";
 import { LiveRecording } from "./components/LiveRecording";
@@ -23,10 +24,18 @@ function AuthPending() {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, isRecoverySession } = useAuth();
+  const { isAuthenticated, isLoading, isRecoverySession, validateSession } = useAuth();
   if (isLoading) return <AuthPending />;
   if (isRecoverySession) return <Navigate to="/reset-password" replace />;
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  return isAuthenticated ? <SessionGuard validateSession={validateSession}>{children}</SessionGuard> : <Navigate to="/login" replace />;
+}
+
+function SessionGuard({ children, validateSession }: { children: React.ReactNode; validateSession: () => Promise<boolean> }) {
+  const location = useLocation();
+  useEffect(() => {
+    void validateSession();
+  }, [location.pathname, validateSession]);
+  return <>{children}</>;
 }
 
 function RedirectIfAuthed() {

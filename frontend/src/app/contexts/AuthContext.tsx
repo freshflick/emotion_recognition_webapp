@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session as SupabaseSession } from "@supabase/supabase-js";
 
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
@@ -16,6 +16,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  validateSession: () => Promise<boolean>;
   verifyMfa: (code: string) => Promise<void>;
 }
 
@@ -52,6 +53,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
   };
+
+  const validateSession = useCallback(async (): Promise<boolean> => {
+    if (!supabase || !isSupabaseConfigured) return true;
+
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data.user) return true;
+
+    // A network failure should not sign somebody out. Auth errors with a 401
+    // mean another device revoked the session or the token is no longer valid.
+    if (error?.status !== 401) return true;
+
+    clearSessions();
+    setSession(null);
+    setMfaRequired(false);
+    setIsRecoverySession(false);
+    await supabase.auth.signOut({ scope: "local" });
+    return false;
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -92,6 +111,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Supabase's local session cache does not broadcast sign-outs between
+  // devices. Ask the Auth API periodically and whenever this tab becomes
+  // active so every page observes revocation, not only Settings.
+  useEffect(() => {
+    if (!supabase || !session) return;
+
+    let checking = false;
+    const validate = () => {
+      if (checking || document.visibilityState === "hidden") return;
+      checking = true;
+      void validateSession().finally(() => {
+        checking = false;
+      });
+    };
+
+    validate();
+    const interval = window.setInterval(validate, 15_000);
+    const handleInvalidSession = () => validate();
+    window.addEventListener("focus", validate);
+    window.addEventListener("emphona:auth-invalid", handleInvalidSession);
+    document.addEventListener("visibilitychange", validate);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", validate);
+      window.removeEventListener("emphona:auth-invalid", handleInvalidSession);
+      document.removeEventListener("visibilitychange", validate);
+    };
+  }, [session, validateSession]);
 
   const signIn = async (email: string, password: string) => {
     if (!supabase) {
@@ -169,6 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signIn,
     signUp,
     signOut,
+    validateSession,
     verifyMfa,
   };
 

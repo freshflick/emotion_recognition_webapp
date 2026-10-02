@@ -68,6 +68,9 @@ async function request<T>(
   }
 
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("emphona:auth-invalid"));
+    }
     const errorMsg = await errorMessage(res);
     console.error('❌ API error:', errorMsg, res.status);
     throw new ApiError(errorMsg, res.status);
