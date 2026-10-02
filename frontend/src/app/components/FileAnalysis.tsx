@@ -33,11 +33,6 @@ export const serif = "'Playfair Display', Georgia, serif";
 export const sans = "'IBM Plex Sans', system-ui, sans-serif";
 export const mono = "'IBM Plex Mono', monospace";
 
-function getDominant(scores: { [key in Emotion]: number }) {
-  const entries = Object.entries(scores) as [Emotion, number][];
-  return entries.reduce((a, b) => (a[1] > b[1] ? a : b));
-}
-
 export function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -64,7 +59,10 @@ function timeAgo(timestamp: number) {
    varies by modality is the trust weighting it learned for this utterance.
    So: the real prediction, then the real audio/text split beside it. */
 function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData }) {
-  const [fusedDominant, fusedConf] = getDominant(latestEmotion.fused);
+  // Use the backend's top label/confidence for the fused result. Recomputing
+  // from mapped UI scores can disagree when Frustrated and Angry are merged.
+  const fusedDominant = latestEmotion.dominantEmotion;
+  const fusedConf = latestEmotion.confidence;
   const weights = latestEmotion.modalityWeights;
 
   const columns = [

@@ -45,7 +45,7 @@ function toScores(probs: Record<BackendLabel, number>): Record<Emotion, number> 
     const key = LABEL_TO_EMOTION[label as BackendLabel];
     // Ignore labels we don't recognise rather than crashing — if the model is
     // retrained with more classes, the UI degrades instead of breaking.
-    if (key) scores[key] = value;
+    if (key) scores[key] += value;
   }
   return scores;
 }
