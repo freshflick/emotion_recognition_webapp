@@ -14,6 +14,7 @@ interface SessionsContextType {
   /** True when the backend is serving randomised placeholder predictions. */
   isMock: boolean;
   isLoadingSessions: boolean;
+  sessionsError: string | null;
   /** Re-pull persisted reports — call after saving a new session. */
   refreshSessions: () => Promise<void>;
 }
@@ -25,6 +26,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(true);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   // Health is public — checked regardless of auth so the UI can tell
   // "backend down" apart from "not signed in".
@@ -41,12 +43,14 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const refreshSessions = useCallback(async () => {
     if (!isAuthenticated) return;
     setIsLoadingSessions(true);
+    setSessionsError(null);
     try {
       hydrateSessions(await fetchSessions());
     } catch (err) {
       // Non-fatal: the app still works for live analysis, it just won't show
       // past reports. Most often means Supabase isn't configured.
       console.warn("[sessions] could not load saved reports:", err);
+      setSessionsError(err instanceof Error ? err.message : "Could not load saved reports");
     } finally {
       setIsLoadingSessions(false);
     }
@@ -63,6 +67,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         isCheckingHealth,
         isMock: health?.mock_mode ?? false,
         isLoadingSessions,
+        sessionsError,
         refreshSessions,
       }}
     >

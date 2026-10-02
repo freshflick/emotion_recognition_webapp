@@ -63,7 +63,7 @@ function ChartShell({ title, children }: { title: string; children: React.ReactN
 export function Analytics() {
   const [timeRange, setTimeRange] = useState<TimeRange>("week");
   const sessions = useSessionStore();
-  const { isLoadingSessions } = useSessions();
+  const { isLoadingSessions, sessionsError } = useSessions();
 
   // Filter sessions by time range
   const filterByTimeRange = (range: TimeRange) => {
@@ -211,12 +211,18 @@ export function Analytics() {
            </div>
          </div>
 
-         {isLoadingSessions && (
+        {isLoadingSessions && (
            <div className="mb-8 flex items-center gap-3 border px-4 py-3 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)", color: "var(--accent-foreground)", fontFamily: sans }}>
              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
              <span>Loading your emotional history...</span>
            </div>
-         )}
+        )}
+
+        {sessionsError && !isLoadingSessions && (
+          <div className="mb-8 border px-4 py-3 text-sm" style={{ borderColor: "var(--destructive)", backgroundColor: "color-mix(in srgb, var(--destructive) 12%, var(--background))", color: "var(--foreground)", fontFamily: sans }}>
+            Analytics could not load saved sessions: {sessionsError}
+          </div>
+        )}
 
         {/* High-signal summary */}
         <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6 mb-10">
