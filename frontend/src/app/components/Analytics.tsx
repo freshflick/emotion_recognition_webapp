@@ -28,17 +28,17 @@ import { useSessions } from "../contexts/SessionsContext";
 import { Loader2 } from "lucide-react";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
-  happy: "#f59e0b",
-  sad: "#38bdf8",
-  angry: "#fb7185",
-  neutral: "#a78bfa",
+  happy: "#b58b4a",
+  sad: "#7097a1",
+  angry: "#a86f70",
+  neutral: "#887b9c",
 };
 
 const EMOTION_CARD_BACKGROUNDS: { [key in Emotion]: string } = {
-  happy: "#ffd166",
-  sad: "#8ee7ff",
-  angry: "#ff9eaa",
-  neutral: "#d5c2ff",
+  happy: "#e8d9b8",
+  sad: "#d2e0e1",
+  angry: "#e3cecf",
+  neutral: "#ddd7e4",
 };
 
 const serif = "'Playfair Display', Georgia, serif";
@@ -162,7 +162,9 @@ export function Analytics() {
 
   // Statistics
   const totalSessions = filteredSessions.length;
-  const dominantEmotion = Object.entries(emotionCounts).sort((a, b) => b[1] - a[1])[0];
+  const dominantEmotion = totalSessions > 0
+      ? Object.entries(emotionCounts).sort((a, b) => b[1] - a[1])[0]
+      : undefined;
   const avgConfidence =
       totalSessions > 0
           ? filteredSessions.reduce((sum, s) => sum + s.summary.averageConfidence, 0) /
