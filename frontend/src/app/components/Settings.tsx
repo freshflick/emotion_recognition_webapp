@@ -67,25 +67,10 @@ export function Settings() {
       return;
     }
 
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser?.email) {
-      toast.error("Could not verify your account email");
-      return;
-    }
-
-    const { error: reauthError } = await supabase.auth.signInWithPassword({
-      email: authUser.email,   // ← real Supabase Auth email, not the local profile
-      password: currentPassword,
-    });
-
-    if (reauthError) {
-       toast.error("Current password is incorrect");
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.updateUser({
-        password: newPassword
+        password: newPassword,
+        current_password: currentPassword,
       });
 
       if (error) {
