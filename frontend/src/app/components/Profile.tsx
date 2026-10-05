@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { User, Mail, Calendar, Edit2, Save, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Button } from "./ui/button";
@@ -22,7 +22,7 @@ const cardStyle = {
 };
 
 export function Profile() {
-  const { user, updateUserProfile } = useUser();
+  const { user, pendingEmail, updateUserProfile } = useUser();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -31,6 +31,12 @@ export function Profile() {
     bio: user.bio || "",
     avatar: user.avatar || "",
   });
+
+  useEffect(() => {
+    if (!isEditing) {
+      setFormData({ name: user.name, email: user.email, bio: user.bio || "", avatar: user.avatar || "" });
+    }
+  }, [user, isEditing]);
 
   const sessions = useSessionStore();
   const totalSessions = sessions.length;
@@ -76,7 +82,7 @@ export function Profile() {
       // metadata too) rather than setting local state directly — otherwise
       // this avatar would get wiped on the next token refresh, same as the
       // name/bio bug this file used to have.
-      updateUserProfile({avatar: bustedUrl});
+      await updateUserProfile({avatar: bustedUrl});
       setFormData((prev) => ({ ...prev, avatar: bustedUrl }));
       toast.success("Profile picture updated");
     } catch (err) {
@@ -86,7 +92,7 @@ export function Profile() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name.trim()) {
       toast.error("Name cannot be empty");
       return;
@@ -96,13 +102,13 @@ export function Profile() {
       return;
     }
 
-    const emailChanged = formData.email !== user.email;
+    const emailChanged = formData.email.trim() !== user.email;
 
     setIsSaving(true);
     try {
-      updateUserProfile({
+      await updateUserProfile({
         name: formData.name,
-        email: formData.email,
+        email: formData.email.trim(),
         bio: formData.bio,
         avatar: formData.avatar,
       });
@@ -110,7 +116,7 @@ export function Profile() {
       setIsEditing(false);
       toast.success(
           emailChanged
-              ? "Profile updated — check your inbox to confirm the new email address"
+              ? "Email change requested. Check both your current and new inboxes for confirmation links."
               : "Profile updated successfully",
       );
     } catch (err) {
@@ -150,6 +156,12 @@ export function Profile() {
         </div>
 
         <SessionLoadingIndicator />
+
+        {pendingEmail && pendingEmail !== user.email && (
+          <div role="status" className="mb-6 border p-4 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
+            Email change to {pendingEmail} is awaiting confirmation. Check both your current and new inboxes. Continue signing in with {user.email} until Supabase confirms the change.
+          </div>
+        )}
 
         {/* Profile Information */}
         <Card className="rounded-none shadow-none border mb-6" style={cardStyle}>

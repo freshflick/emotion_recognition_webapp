@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 
 interface UserContextType {
   user: UserProfile;
+  pendingEmail: string | null;
   /** Persists to Supabase Auth (when configured) before updating local state.
    *  Throws on failure so callers can show an error instead of a false-positive toast. */
   updateUserProfile: (updates: Partial<UserProfile>) => Promise<void>;
@@ -14,6 +15,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile>(getUser());
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   // The onAuthStateChange listener below needs the latest theme without
   // re-subscribing every time it changes — a ref sidesteps the stale-closure
@@ -42,8 +44,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // Let this throw — callers (Profile.tsx) should catch it and tell
         // the user the save failed, rather than us swallowing it here and
         // updating local state as if it had actually persisted.
-        const { error } = await supabase.auth.updateUser(authUpdates);
+        const { data, error } = await supabase.auth.updateUser(authUpdates);
         if (error) throw error;
+        // Email changes stay pending until Supabase confirms the address.
+        updated.email = data.user.email ?? user.email;
+        setPendingEmail(data.user.new_email || null);
       }
     }
 
@@ -66,6 +71,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
+        setPendingEmail(session.user.new_email || null);
         const real: UserProfile = {
           id: session.user.id,
           email: session.user.email ?? "",
@@ -81,6 +87,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         saveUser(real);
         setUser(real);
       } else {
+        setPendingEmail(null);
         // Signed out — clear so the next login (possibly a different
         // person on this browser) never sees a stale profile.
         localStorage.removeItem("emotionmonitor_user");
@@ -92,7 +99,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-      <UserContext.Provider value={{ user, updateUserProfile, refreshUser }}>
+      <UserContext.Provider value={{ user, pendingEmail, updateUserProfile, refreshUser }}>
         {children}
       </UserContext.Provider>
   );
