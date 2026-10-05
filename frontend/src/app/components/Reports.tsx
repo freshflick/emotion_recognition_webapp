@@ -19,6 +19,8 @@ import { removeSessions, useSessionStore, type Emotion } from "../utils/emotionE
 import { deleteReports } from "../api/client";
 import { toast } from "sonner";
 import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
+import { LoadingPanel } from "./LoadingPanel";
+import { useSessions } from "../contexts/SessionsContext";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -46,6 +48,7 @@ export function Reports() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const sessions = useSessionStore();
+  const { isLoadingSessions } = useSessions();
 
   // Apply date range filter
   const handleApplyFilter = () => {
@@ -273,7 +276,7 @@ export function Reports() {
               <div className="flex gap-2.5">
                 <Button
                     onClick={generatePDFReport}
-                    disabled={totalSessions === 0}
+                    disabled={isLoadingSessions || totalSessions === 0}
                     className="text-[11px] tracking-[0.12em] uppercase font-normal gap-2"
                     style={{
                       fontFamily: sans, borderRadius: 0, height: "auto", padding: "8px 16px",
@@ -286,7 +289,7 @@ export function Reports() {
                 <Button
                     variant="outline"
                     onClick={generateCSVReport}
-                    disabled={totalSessions === 0}
+                    disabled={isLoadingSessions || totalSessions === 0}
                     className="text-[11px] tracking-[0.12em] uppercase font-normal gap-2"
                     style={{ fontFamily: sans, borderRadius: 0, height: "auto", padding: "8px 16px", borderColor: "var(--border)" }}
                 >
@@ -300,7 +303,6 @@ export function Reports() {
             </p>
           </div>
 
-          <SessionLoadingIndicator />
 
           {/* Date Range Component Box */}
           <div
@@ -374,6 +376,8 @@ export function Reports() {
           </div>
 
           {/* Report Content */}
+          {isDeleting && <LoadingPanel title="Deleting selected reports" description="Removing saved sessions and updating your statistics. Please wait." />}
+          <SessionLoadingIndicator>
           {totalSessions === 0 ? (
               <div className="border py-20 text-center" style={{ borderColor: "var(--border)" }}>
                 <FileText className="mx-auto mb-4 text-muted-foreground/30" style={{ width: 44, height: 44 }} />
@@ -584,6 +588,7 @@ export function Reports() {
                 </div>
               </>
           )}
+          </SessionLoadingIndicator>
         </div>
       </div>
   );

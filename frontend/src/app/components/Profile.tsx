@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useSessionStore } from "../utils/emotionEngine";
 import { supabase } from "../lib/supabase";
 import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
+import { LoadingPanel } from "./LoadingPanel";
 
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
@@ -155,7 +156,7 @@ export function Profile() {
           </p>
         </div>
 
-        <SessionLoadingIndicator />
+        {(isSaving || isUploadingAvatar) && <LoadingPanel title={isUploadingAvatar ? "Uploading your profile picture" : "Saving your profile"} description="Please wait while your account information is updated." />}
 
         {pendingEmail && pendingEmail !== user.email && (
           <div role="status" className="mb-6 border p-4 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
@@ -361,6 +362,7 @@ export function Profile() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <SessionLoadingIndicator>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 { label: "Total Sessions", value: `${totalSessions}`, sub: "Sessions recorded" },
@@ -378,9 +380,10 @@ export function Profile() {
                       {sub}
                     </p>
                   </div>
-              ))}
-            </div>
-          </CardContent>
+               ))}
+             </div>
+            </SessionLoadingIndicator>
+           </CardContent>
         </Card>
       </div>
     </div>

@@ -7,6 +7,7 @@ import { Label } from "./ui/label";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
+import { LoadingPanel } from "./LoadingPanel";
 
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
@@ -20,6 +21,7 @@ export function ResetPassword() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSaving) return;
     if (!supabase) {
       toast.error("Password reset is not configured");
       return;
@@ -57,6 +59,9 @@ export function ResetPassword() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {isSaving && (
+            <LoadingPanel title="Updating your password" description="Please wait while your password is saved and you are securely signed out." />
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="reset-password" className="text-xs uppercase tracking-wider text-muted-foreground">New password</Label>
             <div className="relative">

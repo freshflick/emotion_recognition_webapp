@@ -7,6 +7,7 @@ import { Label } from "./ui/label";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
+import { LoadingPanel } from "./LoadingPanel";
 
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
@@ -22,9 +23,12 @@ export function Login() {
   const { signIn, signUp, isDevMode, mfaRequired, verifyMfa } = useAuth();
   const [mfaCode, setMfaCode] = useState("");
   const [isVerifyingMfa, setIsVerifyingMfa] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const isPending = isLoading || isVerifyingMfa || isSendingReset;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending) return;
     if (!email || !password) {
       toast.error("Please fill in all fields");
       return;
@@ -58,6 +62,7 @@ export function Login() {
   };
 
   const handleForgotPassword = async () => {
+    if (isPending) return;
     if (isDevMode) {
       toast.info("Password reset needs Supabase configured (see .env.example)");
       return;
@@ -66,15 +71,23 @@ export function Login() {
       toast.error("Enter your email address first");
       return;
     }
-    const { error } = await supabase!.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) toast.error(error.message);
-    else toast.success("Password reset link sent — check your email.");
+    setIsSendingReset(true);
+    try {
+      const { error } = await supabase!.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) toast.error(error.message);
+      else toast.success("Password reset link sent — check your email.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send password reset link");
+    } finally {
+      setIsSendingReset(false);
+    }
   };
 
   const handleVerifyMfa = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPending) return;
     if (mfaCode.length !== 6) {
       toast.error("Enter the 6-digit code");
       return;
@@ -176,6 +189,14 @@ export function Login() {
               </p>
             </div>
 
+            {isPending && (
+              <div className="mb-5">
+                <LoadingPanel
+                  title={isVerifyingMfa ? "Verifying authentication code" : isSendingReset ? "Sending password reset email" : mode === "signup" ? "Creating your account" : "Signing you in"}
+                  description="Please wait while your request is processed."
+                />
+              </div>
+            )}
             {mfaRequired ? (
                 <form onSubmit={handleVerifyMfa} className="space-y-5">
                   <div className="space-y-1.5">
@@ -188,6 +209,7 @@ export function Login() {
                         maxLength={6}
                         placeholder="000000"
                         value={mfaCode}
+                        disabled={isPending}
                         onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
                         className="text-center text-xl tracking-[0.5em] rounded-none border h-12"
                         style={{ borderColor: "var(--border)", fontFamily: mono }}
@@ -197,7 +219,7 @@ export function Login() {
                       Enter the 6-digit code from your authenticator app.
                     </p>
                   </div>
-                  <Button type="submit" className="w-full rounded-none h-10 text-xs tracking-[0.14em] uppercase" disabled={isVerifyingMfa}>
+                  <Button type="submit" className="w-full rounded-none h-10 text-xs tracking-[0.14em] uppercase" disabled={isPending}>
                     {isVerifyingMfa ? "Verifying…" : "Verify"}
                   </Button>
                 </form>
@@ -213,6 +235,7 @@ export function Login() {
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
                             id="email"
+                            disabled={isPending}
                             type="email"
                             placeholder="you@example.com"
                             value={email}
@@ -233,6 +256,7 @@ export function Login() {
                             type="button"
                             className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
                             onClick={handleForgotPassword}
+                            disabled={isPending}
                             style={{ fontFamily: sans }}
                         >
                           Forgot password?
@@ -242,6 +266,7 @@ export function Login() {
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
                             id="password"
+                            disabled={isPending}
                             type={showPassword ? "text" : "password"}
                             placeholder="••••••••"
                             value={password}
@@ -269,7 +294,7 @@ export function Login() {
                           backgroundColor: "var(--foreground)",
                           color: "var(--background)",
                         }}
-                        disabled={isLoading}
+                        disabled={isPending}
                     >
                       {isLoading ? (
                           <span className="flex items-center gap-2">
@@ -307,6 +332,7 @@ export function Login() {
                     <button
                         type="button"
                         onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                        disabled={isPending}
                         className="text-foreground font-semibold hover:underline"
                     >
                       {mode === "signin" ? "Create one" : "Sign in"}

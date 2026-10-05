@@ -26,6 +26,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(true);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [hasLoadedSessions, setHasLoadedSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   // Health is public — checked regardless of auth so the UI can tell
@@ -52,13 +53,19 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       console.warn("[sessions] could not load saved reports:", err);
       setSessionsError(err instanceof Error ? err.message : "Could not load saved reports");
     } finally {
+      setHasLoadedSessions(true);
       setIsLoadingSessions(false);
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setHasLoadedSessions(false);
+      setSessionsError(null);
+      return;
+    }
     void refreshSessions();
-  }, [refreshSessions]);
+  }, [refreshSessions, isAuthenticated]);
 
   return (
     <SessionsContext.Provider
@@ -66,7 +73,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         health,
         isCheckingHealth,
         isMock: health?.mock_mode ?? false,
-        isLoadingSessions,
+        isLoadingSessions: isLoadingSessions || (isAuthenticated && !hasLoadedSessions),
         sessionsError,
         refreshSessions,
       }}

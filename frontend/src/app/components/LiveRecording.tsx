@@ -21,6 +21,8 @@ import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
 import { getSessions, type Session } from "../utils/emotionEngine"; // add Session + getSessions to existing import
 import {SessionDetailsDialog} from "./SessionDetailsDialog.tsx";
+import { LoadingPanel } from "./LoadingPanel";
+import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -701,16 +703,12 @@ export function LiveRecording() {
 
           {/* Results shown here are only as real as the backend serving them —
               say so plainly rather than letting placeholders look like data. */}
-           {isCheckingHealth && (
-               <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "var(--primary)", backgroundColor: "var(--card)" }}>
-                 <p className="text-xs font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "var(--primary)", fontFamily: sans }}>
-                   Backend loading
-                 </p>
-                 <p className="text-xs text-muted-foreground flex items-center gap-2" style={{ fontFamily: sans }}>
-                   <span className="size-3 rounded-full border-2 border-primary/25 border-t-primary animate-spin" />
-                   Waking the analysis service and checking model readiness…
-                 </p>
-               </div>
+           {isCheckingHealth && <LoadingPanel title="Backend loading" description="Checking the analysis service connection. Please wait before starting a recording." />}
+           {(isSaving || isConnecting || isProcessing || enrollingSpeaker !== null) && (
+             <LoadingPanel
+               title={isSaving ? "Finalising and saving your recording" : isConnecting ? "Connecting to the model service" : enrollingSpeaker !== null ? "Preparing the speaker's voice profile" : "Analysing the latest speech"}
+               description={isSaving ? "Processing the final turn and saving your results before opening Analytics." : isConnecting ? "Preparing the microphone and GPU models. The first connection after an idle period may take longer." : enrollingSpeaker !== null ? "Speak during the countdown, then wait while your sample is processed." : "Transcribing the completed turn and computing its emotion prediction."}
+             />
            )}
            {!isCheckingHealth && !backendReachable && (
                <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#b8312f", backgroundColor: "var(--card)" }}>
@@ -718,7 +716,7 @@ export function LiveRecording() {
                   Backend unreachable
                 </p>
                 <p className="text-xs text-muted-foreground" style={{ fontFamily: sans }}>
-                  Start it with <span style={{ fontFamily: mono }}>cd backend &amp;&amp; uvicorn main:app --reload --port 8000</span>, then reload this page.
+                  We could not connect to the analysis service. Check your connection and reload this page to try again.
                 </p>
               </div>
           )}
@@ -912,7 +910,7 @@ export function LiveRecording() {
                           }
                           title={
                             !backendReachable
-                              ? "Backend is not running"
+                              ? (isCheckingHealth ? "Checking backend connection" : "Backend is unavailable")
                               : expectedSpeakers > 1 && enrolledSpeakers.length !== expectedSpeakers
                                 ? "Enroll every speaker first"
                                 : undefined
@@ -971,7 +969,7 @@ export function LiveRecording() {
                         )}
                         {!isRecording && !isConnecting && duration === 0 && (
                             <span className="text-xs text-muted-foreground tracking-wider" style={{ fontFamily: sans }}>
-                          {backendReachable ? "Tap to begin" : "Backend offline"}
+                          {isCheckingHealth ? "Checking backend..." : backendReachable ? "Tap to begin" : "Backend offline"}
                         </span>
                         )}
                       </div>
@@ -1302,7 +1300,7 @@ export function LiveRecording() {
         {/* Recent live sessions — hidden while a session is actively recording */}
         {!isRecording && (
             <div className="page-container pt-8 pb-8">
-              <RecentLiveSessions onViewSession={setViewedSession} />
+              <SessionLoadingIndicator><RecentLiveSessions onViewSession={setViewedSession} /></SessionLoadingIndicator>
             </div>
         )}
 

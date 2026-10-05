@@ -11,6 +11,7 @@ import { getTimeBasedGreeting, getSessionQuote } from "../utils/userProfile";
 import { useSessionStore } from "../utils/emotionEngine";
 import type { Emotion } from "../utils/emotionEngine";
 import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
+import { LoadingPanel } from "./LoadingPanel";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
     happy: "#c07c20",
@@ -163,7 +164,7 @@ export function Dashboard() {
                                 “{quote.text}”
                             </blockquote>
                         ) : (
-                            <div className="mt-8 h-20" />
+                            <div className="mt-6"><LoadingPanel title="Loading today's quote" /></div>
                         )}
                     </div>
                     {quote && <p className="text-xs tracking-[0.12em] uppercase opacity-60 mt-8" style={{ fontFamily: sans }}>— {quote.author}</p>}
@@ -171,7 +172,7 @@ export function Dashboard() {
 
             </div>
 
-            <SessionLoadingIndicator />
+            <SessionLoadingIndicator>
 
             {/* At-a-glance signal strip */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-px mb-10 border" style={{ borderColor: "var(--border)", backgroundColor: "var(--border)" }}>
@@ -320,6 +321,7 @@ export function Dashboard() {
                     </div>
                 </div>
             )}
+            </SessionLoadingIndicator>
           </div>
         </div>
     );

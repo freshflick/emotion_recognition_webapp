@@ -24,8 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { useSessionStore, type Emotion } from "../utils/emotionEngine";
-import { useSessions } from "../contexts/SessionsContext";
-import { Loader2 } from "lucide-react";
+import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#b58b4a",
@@ -63,7 +62,6 @@ function ChartShell({ title, children }: { title: string; children: React.ReactN
 export function Analytics() {
   const [timeRange, setTimeRange] = useState<TimeRange>("week");
   const sessions = useSessionStore();
-  const { isLoadingSessions, sessionsError } = useSessions();
 
   // Filter sessions by time range
   const filterByTimeRange = (range: TimeRange) => {
@@ -213,18 +211,7 @@ export function Analytics() {
            </div>
          </div>
 
-        {isLoadingSessions && (
-           <div className="mb-8 flex items-center gap-3 border px-4 py-3 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)", color: "var(--accent-foreground)", fontFamily: sans }}>
-             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-             <span>Loading your emotional history...</span>
-           </div>
-        )}
-
-        {sessionsError && !isLoadingSessions && (
-          <div className="mb-8 border px-4 py-3 text-sm" style={{ borderColor: "var(--destructive)", backgroundColor: "color-mix(in srgb, var(--destructive) 12%, var(--background))", color: "var(--foreground)", fontFamily: sans }}>
-            Analytics could not load saved sessions: {sessionsError}
-          </div>
-        )}
+        <SessionLoadingIndicator>
 
         {/* High-signal summary */}
         <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6 mb-10">
@@ -496,6 +483,7 @@ export function Analytics() {
             </div>
           </TabsContent>
         </Tabs>
+        </SessionLoadingIndicator>
         </div>
       </div>
   );

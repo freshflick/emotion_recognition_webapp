@@ -11,6 +11,7 @@ import { Profile } from "./components/Profile";
 import { Login } from "./components/Login";
 import { ResetPassword } from "./components/ResetPassword";
 import { useAuth } from "./contexts/AuthContext";
+import { LoadingPanel } from "./components/LoadingPanel";
 
 // Restoring a Supabase session is asynchronous. Without this gate, a page
 // refresh would briefly see isAuthenticated === false and bounce a signed-in
@@ -18,7 +19,7 @@ import { useAuth } from "./contexts/AuthContext";
 function AuthPending() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <span className="size-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+      <div className="w-full max-w-xl px-6"><LoadingPanel title="Checking your sign-in" description="Restoring your secure session. Please wait." /></div>
     </div>
   );
 }

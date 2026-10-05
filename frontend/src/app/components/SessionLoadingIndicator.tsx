@@ -1,16 +1,10 @@
-import { Loader2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useSessions } from "../contexts/SessionsContext";
+import { LoadingPanel } from "./LoadingPanel";
 
-const sans = "'IBM Plex Sans', system-ui, sans-serif";
-
-export function SessionLoadingIndicator() {
-  const { isLoadingSessions } = useSessions();
-  if (!isLoadingSessions) return null;
-
-  return (
-    <div className="mb-6 flex items-center gap-3 border px-4 py-3 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--accent)", color: "var(--accent-foreground)", fontFamily: sans }}>
-      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      <span>Loading your saved statistics...</span>
-    </div>
-  );
+export function SessionLoadingIndicator({ children }: { children?: ReactNode }) {
+  const { isLoadingSessions, sessionsError } = useSessions();
+  if (isLoadingSessions) return <LoadingPanel title="Loading your saved statistics" description="Fetching session history and preparing your reports and emotion charts. Please wait." />;
+  if (sessionsError) return <div role="alert" className="mb-6 border border-destructive bg-card p-6 text-foreground"><p className="text-lg font-semibold">Could not load your saved statistics</p><p className="mt-2 text-sm">{sessionsError}</p></div>;
+  return <>{children}</>;
 }

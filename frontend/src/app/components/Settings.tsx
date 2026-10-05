@@ -19,6 +19,7 @@ import { useUser } from "../contexts/UserContext";
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
 import {supabase} from "../lib/supabase.ts";
+import { LoadingPanel } from "./LoadingPanel";
 
 const serif = "'Playfair Display', Georgia, serif";
 const sans = "'IBM Plex Sans', system-ui, sans-serif";
@@ -39,18 +40,30 @@ export function Settings() {
   const [factorId, setFactorId] = useState<string | null>(null);
   const [qrCodeSvg, setQrCodeSvg] = useState<string>("");
   const [manualSecret, setManualSecret] = useState<string>("");
+  const [isLoadingFactors, setIsLoadingFactors] = useState(true);
+  const [factorsError, setFactorsError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (!supabase) return;
-        supabase.auth.mfa.listFactors().then(({ data, error }) => {
-            if (error) return;
-          setTwoFAEnabled(
-              (data?.totp?.some((factor) => factor.status === "verified") ?? false)
-          );
-        });
-    }, []);
+  useEffect(() => {
+    let active = true;
+    const loadFactors = async () => {
+      try {
+        if (!supabase) throw new Error("Supabase client not initialized");
+        const { data, error } = await supabase.auth.mfa.listFactors();
+        if (error) throw error;
+        if (active) setTwoFAEnabled(data.totp.some((factor) => factor.status === "verified"));
+      } catch (error) {
+        if (active) setFactorsError(error instanceof Error ? error.message : "Could not load two-factor authentication status");
+      } finally {
+        if (active) setIsLoadingFactors(false);
+      }
+    };
+    void loadFactors();
+    return () => { active = false; };
+  }, []);
 
   const handleChangePassword = async () => {
+    if (pendingAction) return;
     if (!supabase) {
       toast.error("Supabase client not initialized");
       return;
@@ -71,6 +84,7 @@ export function Settings() {
       return;
     }
 
+    setPendingAction("Updating password");
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
@@ -87,95 +101,120 @@ export function Settings() {
     } catch (error) {
       toast.error("An unexpected error occurred");
       console.error(error);
+    } finally {
+      setPendingAction(null);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     }
-
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
 
   };
 
   const handleCloseQRDialog = async () => {
+    if (pendingAction) return;
     if (!supabase) {
       setShowQRDialog(false);
       return;
     }
 
-    // If enrollment was started but not verified, remove the pending factor.
-    if (factorId && !twoFAEnabled) {
-      const { error } = await supabase.auth.mfa.unenroll({
-        factorId,
-      });
-
-      if (error) {
-        console.error("Failed to cancel 2FA enrollment:", error);
+    setPendingAction("Cancelling two-factor setup");
+    try {
+      // If enrollment was started but not verified, remove the pending factor.
+      if (factorId && !twoFAEnabled) {
+        const { error } = await supabase.auth.mfa.unenroll({ factorId });
+        if (error) throw error;
       }
+    } catch (error) {
+      console.error("Failed to cancel 2FA enrollment:", error);
+      toast.error("Could not cancel two-factor enrollment");
+    } finally {
+      setFactorId(null);
+      setQrCodeSvg("");
+      setManualSecret("");
+      setVerifyCode("");
+      setShowQRDialog(false);
+      setPendingAction(null);
     }
-
-    setFactorId(null);
-    setQrCodeSvg("");
-    setManualSecret("");
-    setVerifyCode("");
-    setShowQRDialog(false);
   };
 
-    const handleStartEnrollment = async () => {
-        if (!supabase) return;
-        const { data, error } = await supabase.auth.mfa.enroll({
-          factorType: "totp",
-          friendlyName: "Authenticator App",
-        });
-        if (error) {
-              toast.error(error.message);
-              return;
-          }
-          setFactorId(data.id);
-          setQrCodeSvg(data.totp.qr_code);
-          setManualSecret(data.totp.secret);
-          setVerifyCode("");
-          setShowQRDialog(true);
-    };
+  const handleStartEnrollment = async () => {
+    if (!supabase || pendingAction || isLoadingFactors || factorsError) return;
+    setPendingAction("Setting up two-factor authentication");
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: "Authenticator App",
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setFactorId(data.id);
+      setQrCodeSvg(data.totp.qr_code);
+      setManualSecret(data.totp.secret);
+      setVerifyCode("");
+      setShowQRDialog(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start two-factor enrollment");
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
-    const handleVerifyEnrollment = async () => {
-        if (!supabase || !factorId) return;
+  const handleVerifyEnrollment = async () => {
+    if (!supabase || !factorId || pendingAction) return;
+    setPendingAction("Verifying two-factor authentication");
+    try {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId,
+      });
+      if (challengeError) {
+        toast.error(challengeError.message);
+        return;
+      }
 
-        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
-            factorId,
-        });
-        if (challengeError) {
-            toast.error(challengeError.message);
-            return;
-        }
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.id,
+        code: verifyCode,
+      });
+      if (verifyError) {
+        toast.error("Invalid code — try again");
+        return;
+      }
 
-        const { error: verifyError } = await supabase.auth.mfa.verify({
-            factorId,
-            challengeId: challenge.id,
-            code: verifyCode,
-        });
-        if (verifyError) {
-            toast.error("Invalid code — try again");
-            return;
-        }
+      setTwoFAEnabled(true);
+      setShowQRDialog(false);
+      toast.success("Two-factor authentication enabled");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not verify two-factor enrollment");
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
-        setTwoFAEnabled(true);
-        setShowQRDialog(false);
-        toast.success("Two-factor authentication enabled");
-    };
+  const handleDisable2FA = async () => {
+    if (!supabase || pendingAction || isLoadingFactors || factorsError) return;
+    setPendingAction("Disabling two-factor authentication");
+    try {
+      const { data, error: factorsFetchError } = await supabase.auth.mfa.listFactors();
+      if (factorsFetchError) throw factorsFetchError;
+      const factor = data?.totp?.[0];
+      if (!factor) return;
 
-    const handleDisable2FA = async () => {
-        if (!supabase) return;
-        const { data } = await supabase.auth.mfa.listFactors();
-        const factor = data?.totp?.[0];
-        if (!factor) return;
-
-        const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
-        if (error) {
-            toast.error(error.message);
-            return;
-        }
-        setTwoFAEnabled(false);
-        toast.success("Two-factor authentication disabled");
-    };
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setTwoFAEnabled(false);
+      toast.success("Two-factor authentication disabled");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not disable two-factor authentication");
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   const cardStyle = {
     borderColor: "var(--border)",
@@ -199,6 +238,9 @@ export function Settings() {
             </p>
           </div>
 
+          {pendingAction && !showQRDialog && (
+            <LoadingPanel title={pendingAction} description="Please wait while your account security is updated." />
+          )}
           <Tabs defaultValue="account" className="space-y-6">
             <div className="border-b" style={{ borderColor: "var(--border)" }}>
               <TabsList className="bg-transparent h-auto p-0 gap-0">
@@ -290,6 +332,7 @@ export function Settings() {
                     </Label>
                     <Input
                         id="current-password"
+                        disabled={!!pendingAction}
                         type="password"
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
@@ -304,6 +347,7 @@ export function Settings() {
                     </Label>
                     <Input
                         id="new-password"
+                        disabled={!!pendingAction}
                         type="password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
@@ -321,6 +365,7 @@ export function Settings() {
                     </Label>
                     <Input
                         id="confirm-password"
+                        disabled={!!pendingAction}
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
@@ -331,6 +376,7 @@ export function Settings() {
 
                   <Button
                       onClick={handleChangePassword}
+                      disabled={!!pendingAction}
                       className="w-full rounded-none text-xs font-normal uppercase tracking-wider"
                       style={{ fontFamily: sans }}
                   >
@@ -349,6 +395,13 @@ export function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {isLoadingFactors ? (
+                    <LoadingPanel title="Checking two-factor authentication" description="Loading your authenticator status." />
+                  ) : factorsError ? (
+                    <div role="alert" className="border border-destructive/40 p-4 text-sm text-destructive">
+                      Could not load two-factor authentication status: {factorsError}. Reload the page to try again.
+                    </div>
+                  ) : (
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium text-sm flex items-center gap-2" style={{ fontFamily: sans }}>
@@ -373,6 +426,7 @@ export function Settings() {
                             className="rounded-none text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive font-normal uppercase tracking-wider"
                             style={{ fontFamily: sans }}
                             onClick={() => { void handleDisable2FA() }}
+                            disabled={!!pendingAction}
                         >
                           <ShieldOff className="size-3.5 mr-1.5" />
                           Disable
@@ -384,12 +438,14 @@ export function Settings() {
                             className="rounded-none text-xs font-normal uppercase tracking-wider"
                             style={{ fontFamily: sans, borderColor: "var(--border)" }}
                             onClick={() => { void handleStartEnrollment(); }}
+                            disabled={!!pendingAction}
                         >
                           <ShieldCheck className="size-3.5 mr-1.5" />
                           Set Up 2FA
                         </Button>
                     )}
                   </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -414,6 +470,9 @@ export function Settings() {
                     </DialogDescription>
                   </DialogHeader>
 
+                  {pendingAction && (
+                    <LoadingPanel title={pendingAction} description="Please wait before closing this setup." />
+                  )}
                   <div className="flex gap-6 py-2">
                     {/* Left: QR code */}
                     <div className="flex-shrink-0 flex flex-col items-center gap-3">
@@ -454,6 +513,7 @@ export function Settings() {
                           </Label>
                           <Input
                               id="totp-verify"
+                              disabled={!!pendingAction}
                               placeholder="000000"
                               maxLength={6}
                               value={verifyCode}
@@ -466,7 +526,7 @@ export function Settings() {
                         <Button
                             className="w-full rounded-none text-xs font-normal uppercase tracking-wider"
                             style={{ fontFamily: sans }}
-                            disabled={verifyCode.length !== 6}
+                            disabled={!!pendingAction || verifyCode.length !== 6}
                             onClick={() => { void handleVerifyEnrollment() }}
                         >
                           <ShieldCheck className="size-4 mr-2" />

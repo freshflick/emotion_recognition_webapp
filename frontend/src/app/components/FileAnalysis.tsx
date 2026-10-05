@@ -24,6 +24,8 @@ import { analyzeFile as analyzeFileApi } from "../api/client";
 import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
 import {SessionDetailsDialog} from "./SessionDetailsDialog.tsx";
+import { LoadingPanel } from "./LoadingPanel";
+import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 
 export const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -412,7 +414,7 @@ function SubjectSampleRecorder({
 
 export function FileAnalysis() {
   const navigate = useNavigate();
-  const { health, isMock, refreshSessions } = useSessions();
+  const { health, isMock, isCheckingHealth, refreshSessions } = useSessions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [subjectSample, setSubjectSample] = useState<Blob | null>(null);
@@ -554,13 +556,15 @@ export function FileAnalysis() {
             </p>
           </div>
 
-          {!backendReachable && (
+          {isCheckingHealth && <LoadingPanel title="Backend loading" description="Checking the analysis service connection. You can select your audio while we connect." />}
+          {isProcessing && <LoadingPanel title="Preparing models and analysing your audio" description="The GPU service may need to start up. Transcription and emotion analysis can take a few minutes for long recordings. Keep this page open." />}
+          {!isCheckingHealth && !backendReachable && (
               <div className="border-l-2 px-4 py-3 mb-8" style={{ borderColor: "#b8312f", backgroundColor: "var(--card)" }}>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1" style={{ color: "#b8312f", fontFamily: sans }}>
                   Backend unreachable
                 </p>
                 <p className="text-xs text-muted-foreground" style={{ fontFamily: sans }}>
-                  Start it with <span style={{ fontFamily: mono }}>cd backend &amp;&amp; uvicorn main:app --reload --port 8000</span>, then reload this page.
+                  We could not connect to the analysis service. Check your connection and reload this page to try again.
                 </p>
               </div>
           )}
@@ -583,7 +587,7 @@ export function FileAnalysis() {
             <div
                 className="border transition-colors cursor-pointer"
                 style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => { if (!isProcessing) fileInputRef.current?.click(); }}
             >
                <div className="p-6 sm:p-10 text-center border-b border-dashed" style={{ borderColor: "var(--border)" }}>
                 <Upload
@@ -599,7 +603,7 @@ export function FileAnalysis() {
                 <p className="text-xs text-muted-foreground tracking-wide uppercase font-normal" style={{ fontFamily: sans }}>
                   MP3 · WAV · M4A · OGG — Max 50 MB
                 </p>
-                <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileSelect} className="hidden" />
+                <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileSelect} disabled={isProcessing} className="hidden" />
               </div>
 
               {selectedFile && (
@@ -642,7 +646,8 @@ export function FileAnalysis() {
                     {subjectSample && (
                         <input
                             type="text"
-                            value={subjectName}
+                             value={subjectName}
+                             disabled={isProcessing}
                             maxLength={60}
                             onChange={(e) => setSubjectName(e.target.value)}
                             placeholder="Name (optional)"
@@ -667,7 +672,7 @@ export function FileAnalysis() {
                       }}
                   >
                     {isProcessing ? (
-                        <><Loader2 style={{ width: 13, height: 13, marginRight: 8 }} className="animate-spin" />Processing... {progress.toFixed(0)}%</>
+                         <><Loader2 style={{ width: 20, height: 20, marginRight: 8 }} className="animate-spin" />Processing... {progress.toFixed(0)}% estimated</>
                     ) : (
                         <><Upload style={{ width: 13, height: 13, marginRight: 8 }} />Analyze Audio</>
                     )}
@@ -676,7 +681,7 @@ export function FileAnalysis() {
                       <div className="space-y-1.5">
                         <Progress value={progress} className="h-0.5 rounded-none" />
                         <p className="text-[11px] tracking-widest uppercase text-muted-foreground text-center font-normal" style={{ fontFamily: sans }}>
-                           Extracting emotion features…
+                           Estimated progress while waiting for the analysis service…
                         </p>
                       </div>
                   )}
@@ -853,7 +858,7 @@ export function FileAnalysis() {
           )}
 
           {/* ── Recent Uploads ── */}
-          <RecentUploads onViewSession={setViewedSession} />
+          <SessionLoadingIndicator><RecentUploads onViewSession={setViewedSession} /></SessionLoadingIndicator>
         </div>
 
         {/* ── Session Details Dialog ── */}
