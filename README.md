@@ -205,6 +205,10 @@ Audio is decoded to 16 kHz mono and split into model windows. The normal window
 size is eight seconds; subject-enrolled uploads use `UPLOAD_WINDOW_SECONDS`
 (four seconds by default).
 
+Uploads are rejected if the first ten seconds contain no detectable speech
+(or the entire clip for shorter files). Trim long silent introductions before
+uploading. This check runs before subject enrollment and emotion analysis.
+
 For a multi-person recording, submit an optional subject voice sample:
 
 ```bash

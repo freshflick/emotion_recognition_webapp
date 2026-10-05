@@ -287,6 +287,7 @@ function SubjectSampleRecorder({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelledRef = useRef(false);
 
   const stop = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -313,6 +314,7 @@ function SubjectSampleRecorder({
       return;
     }
 
+    cancelledRef.current = false;
     chunksRef.current = [];
     // webm/opus is what every browser here can record; the backend decodes it
     // with ffmpeg, so the browser's preferred type is fine as-is.
@@ -327,6 +329,10 @@ function SubjectSampleRecorder({
     };
     recorder.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
+      if (cancelledRef.current) {
+        onSample(null);
+        return;
+      }
       const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
       if (blob.size === 0) {
         setError("Nothing was recorded — try again.");
@@ -371,15 +377,22 @@ function SubjectSampleRecorder({
     <div>
       <button
         type="button"
-        disabled={disabled || isRecording}
-        onClick={() => void start()}
+        disabled={disabled}
+        onClick={() => {
+          if (isRecording) {
+            cancelledRef.current = true;
+            stop();
+          } else {
+            void start();
+          }
+        }}
         className="w-full border px-3 py-2 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
         style={{ borderColor: "var(--border)", fontFamily: sans }}
       >
         {isRecording ? (
             <>
               <Square style={{ width: 12, height: 12 }} />
-              Recording · {secondsLeft}s
+              Recording · {secondsLeft}s · Click to cancel
             </>
         ) : (
             <>
@@ -388,16 +401,6 @@ function SubjectSampleRecorder({
             </>
         )}
       </button>
-      {isRecording && (
-          <button
-              type="button"
-              onClick={stop}
-              className="mt-1.5 w-full text-[10px] uppercase tracking-wider text-muted-foreground underline"
-              style={{ fontFamily: sans }}
-          >
-            Done early
-          </button>
-      )}
       {error && (
           <p className="mt-1.5 text-[10px]" style={{ fontFamily: sans, color: "#b8312f" }}>
             {error}

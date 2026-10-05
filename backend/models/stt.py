@@ -66,6 +66,17 @@ def is_mock() -> bool:
     return _mock_mode
 
 
+def has_speech(waveform) -> bool:
+    """Check decoded 16 kHz audio without invoking transcription or fusion."""
+    import numpy as np
+    from faster_whisper.vad import get_speech_timestamps
+
+    audio = np.asarray(waveform, dtype=np.float32)
+    if audio.size == 0 or not np.isfinite(audio).all():
+        return False
+    return bool(get_speech_timestamps(audio))
+
+
 def transcribe(
     audio_bytes: bytes,
     ignore_before_secs: float = 0.0,

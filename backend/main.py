@@ -199,6 +199,18 @@ async def analyze_file(
             status_code=400, detail=f"Could not decode audio ({ext}): {e}"
         )
 
+    # Reject silent uploads before loading speaker profiles or processing a
+    # potentially long recording window by window.
+    opening_audio = waveform[:10 * audio_utils.SAMPLE_RATE].cpu().numpy()
+    if not await run_blocking(stt.has_speech, opening_audio):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No voices were detected in the first 10 seconds. "
+                "Please upload an audio recording containing speech near the beginning."
+            ),
+        )
+
     # Enrol the subject's voice so each window can be attributed to them.
     diarizer = None
     if subject_sample is not None:
