@@ -434,19 +434,25 @@ async def handle_audio_session(websocket: WebSocket):
                 await websocket.send_json({"type": "flush_done"})
             return
 
-        # The client forwards speech plus at most a short pause tail. Do not
-        # trim a fixed amount here: the tail is bounded and trimming could cut
-        # off a quiet final syllable.
-        chunk_bytes = bytes(audio_buffer)
+        # The client preserves pauses within a turn, then flushes after the
+        # endpoint's one-second silence boundary. Trim only part of that known
+        # trailing pause so it does not dilute VAD and speaker features while
+        # retaining enough end padding for Whisper.
+        if force and len(audio_buffer) > MIN_UTTERANCE_BYTES:
+            trailing_silence = int(0.35 * SAMPLE_RATE * 2)
+            keep = max(MIN_UTTERANCE_BYTES, len(audio_buffer) - trailing_silence)
+            chunk_bytes = bytes(audio_buffer[:keep])
+        else:
+            chunk_bytes = bytes(audio_buffer)
         audio_buffer = bytearray()
 
-        # Give Whisper 0.75s of previous audio so words split by a chunk
+        # Give Whisper 1.0s of previous audio so words split by a chunk
         # boundary remain complete. Word timestamps prevent duplicate output.
         if fmt == "pcm16":
             overlap_bytes = bytes(asr_tail)
             asr_chunk_bytes = overlap_bytes + chunk_bytes
             asr_ignore_before_secs = len(overlap_bytes) / (sample_rate * 2)
-            tail_size = int(sample_rate * 2 * 0.75)
+            tail_size = int(sample_rate * 2 * 1.0)
             asr_tail = bytearray(chunk_bytes[-tail_size:])
         else:
             asr_chunk_bytes = chunk_bytes

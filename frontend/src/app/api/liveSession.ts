@@ -23,7 +23,9 @@ import { UtteranceEndpoint } from "./utteranceEndpoint";
 import type { LiveServerMessage } from "./types";
 
 const TARGET_SAMPLE_RATE = 16000;
-const MAX_FORWARDED_SILENCE_BYTES = TARGET_SAMPLE_RATE * 2 * 0.25;
+// Preserve normal pauses between words; the endpoint closes a turn after 1s,
+// so this still bounds post-speech network traffic instead of streaming idle.
+const MAX_FORWARDED_SILENCE_BYTES = TARGET_SAMPLE_RATE * 2 * 1.1;
 
 /** Worklet source, inlined as a blob so there's no separate asset to serve. */
 const WORKLET_SOURCE = `

@@ -21,6 +21,9 @@ import { toast } from "sonner";
 import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 import { LoadingPanel } from "./LoadingPanel";
 import { useSessions } from "../contexts/SessionsContext";
+import { SessionPagination } from "./SessionPagination";
+
+const REPORTS_PAGE_SIZE = 20;
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -46,6 +49,7 @@ export function Reports() {
   const [appliedRange, setAppliedRange] = useState<{ start: string; end: string } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [page, setPage] = useState(1);
 
   const sessions = useSessionStore();
   const { isLoadingSessions } = useSessions();
@@ -60,12 +64,14 @@ export function Reports() {
     if (!startDate && !endDate) {
       setAppliedRange(null);
       setSelectedIds([]);
+      setPage(1);
       toast.info("Showing all time records");
       return;
     }
 
     setAppliedRange({ start: startDate, end: endDate });
     setSelectedIds([]);
+    setPage(1);
     toast.success("Filter applied");
   };
 
@@ -75,6 +81,7 @@ export function Reports() {
     setEndDate("");
     setAppliedRange(null);
     setSelectedIds([]);
+    setPage(1);
     toast.info("Date filter cleared");
   };
 
@@ -104,6 +111,12 @@ export function Reports() {
   };
 
   const filteredSessions = filterSessions();
+  const pageCount = Math.max(1, Math.ceil(filteredSessions.length / REPORTS_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageSessions = filteredSessions.slice(
+    (currentPage - 1) * REPORTS_PAGE_SIZE,
+    currentPage * REPORTS_PAGE_SIZE,
+  );
 
   // Dynamic status display text based on calendar selection
   const getShowingText = () => {
@@ -157,6 +170,7 @@ export function Reports() {
     }
     removeSessions(ids);
     setSelectedIds([]);
+    setPage(1);
     setIsDeleting(false);
     toast.success(`Deleted ${ids.length} session${ids.length === 1 ? "" : "s"}`);
   };
@@ -518,7 +532,7 @@ export function Reports() {
                       </tr>
                       </thead>
                       <tbody className="divide-y" style={{ borderColor: "var(--border)" }}>
-                      {filteredSessions.map((session) => {
+                      {pageSessions.map((session) => {
                         const dom = session.summary.dominantEmotion;
                         const isSelected = selectedIds.includes(session.id);
                         return (
@@ -585,6 +599,12 @@ export function Reports() {
                       </tbody>
                     </table>
                   </div>
+                  <SessionPagination
+                    page={currentPage}
+                    pageSize={REPORTS_PAGE_SIZE}
+                    totalItems={filteredSessions.length}
+                    onPageChange={setPage}
+                  />
                 </div>
               </>
           )}

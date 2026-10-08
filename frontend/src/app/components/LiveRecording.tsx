@@ -13,16 +13,16 @@ import {
 } from "recharts";
 import { Button } from "./ui/button";
 import {
-  addSession, calculateSessionSummary, type EmotionData, type Emotion,
+  addSession, calculateSessionSummary, useSessionStore, type EmotionData, type Emotion, type Session,
 } from "../utils/emotionEngine";
 import { LiveSession } from "../api/liveSession";
 import { labelToEmotion, toEmotionData } from "../api/adapters";
 import { useSessions } from "../contexts/SessionsContext";
 import { toast } from "sonner";
-import { getSessions, type Session } from "../utils/emotionEngine"; // add Session + getSessions to existing import
 import {SessionDetailsDialog} from "./SessionDetailsDialog.tsx";
 import { LoadingPanel } from "./LoadingPanel";
 import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
+import { SessionPagination } from "./SessionPagination";
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -200,7 +200,12 @@ function getDominantWithScore(scores: { [key in Emotion]: number }) {
 
 /* ── Recent Live Sessions Panel ── */
 function RecentLiveSessions({ onViewSession }: { onViewSession?: (session: Session) => void }) {
-  const sessions = getSessions().filter((s) => s.type === "live").slice(0, 5);
+  const allSessions = useSessionStore().filter((s) => s.type === "live");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(allSessions.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const sessions = allSessions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (sessions.length === 0) return null;
 
@@ -245,6 +250,12 @@ function RecentLiveSessions({ onViewSession }: { onViewSession?: (session: Sessi
           })}
           </div>
         </div>
+        <SessionPagination
+          page={currentPage}
+          pageSize={pageSize}
+          totalItems={allSessions.length}
+          onPageChange={setPage}
+        />
       </div>
   );
 }

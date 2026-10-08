@@ -167,7 +167,7 @@ export function subscribeToSessions(fn: () => void): () => void {
 export function addSession(session: Session) {
   // A new array rather than an in-place unshift: useSessionStore() below
   // compares snapshots by reference, so mutating would not re-render.
-  sessions = [session, ...sessions].slice(0, 50);
+  sessions = [session, ...sessions];
   notify();
 }
 
@@ -179,7 +179,7 @@ export function addSession(session: Session) {
 export function hydrateSessions(loaded: Session[]) {
   const loadedIds = new Set(loaded.map((s) => s.id));
   const localOnly = sessions.filter((s) => !loadedIds.has(s.id));
-  sessions = [...localOnly, ...loaded].slice(0, 50);
+  sessions = [...localOnly, ...loaded];
   notify();
 }
 

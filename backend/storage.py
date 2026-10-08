@@ -81,20 +81,27 @@ def upload_audio_file(
     return path
 
 
-def get_user_reports(user_id: str, limit: int = 50) -> list[dict]:
+def get_user_reports(user_id: str, batch_size: int = 1000) -> list[dict]:
     if not is_enabled():
         return []
 
     client = get_client()
-    result = (
-        client.table("emotion_reports")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    return result.data
+    reports: list[dict] = []
+    start = 0
+    while True:
+        result = (
+            client.table("emotion_reports")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .range(start, start + batch_size - 1)
+            .execute()
+        )
+        batch = result.data or []
+        reports.extend(batch)
+        if len(batch) < batch_size:
+            return reports
+        start += batch_size
 
 
 def delete_user_reports(user_id: str, report_ids: list[str]) -> int:

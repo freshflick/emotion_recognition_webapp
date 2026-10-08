@@ -14,7 +14,7 @@ import {
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import {
-  addSession, calculateSessionSummary, getSessions,
+  addSession, calculateSessionSummary, useSessionStore,
   type EmotionData, type Emotion, type Session, type TranscriptEntry,
 } from "../utils/emotionEngine";
 import {
@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import {SessionDetailsDialog} from "./SessionDetailsDialog.tsx";
 import { LoadingPanel } from "./LoadingPanel";
 import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
+import { SessionPagination } from "./SessionPagination";
 
 export const EMOTION_COLORS: { [key in Emotion]: string } = {
   happy: "#c07c20", sad: "#1e5f8a", angry: "#b8312f",
@@ -188,7 +189,12 @@ function CurrentEmotionStatus({ latestEmotion }: { latestEmotion: EmotionData })
 
 /* ── Recent Uploads Panel ── */
 function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) => void }) {
-  const sessions = getSessions().filter((s) => s.type === "upload").slice(0, 5);
+  const allSessions = useSessionStore().filter((s) => s.type === "upload");
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(allSessions.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const sessions = allSessions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   if (sessions.length === 0) return null;
 
@@ -225,7 +231,7 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
                         className="text-sm font-normal text-foreground truncate"
                         style={{ fontFamily: sans }}
                     >
-                      {session.filename ?? `upload_${i + 1}`}
+                      {session.filename ?? `upload_${(currentPage - 1) * pageSize + i + 1}`}
                     </p>
                     <p
                         className="text-xs text-muted-foreground mt-0.5 font-normal"
@@ -256,6 +262,12 @@ function RecentUploads({ onViewSession }: { onViewSession?: (session: Session) =
           })}
           </div>
         </div>
+        <SessionPagination
+          page={currentPage}
+          pageSize={pageSize}
+          totalItems={allSessions.length}
+          onPageChange={setPage}
+        />
       </div>
   );
 }
