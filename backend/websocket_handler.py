@@ -124,9 +124,10 @@ async def process_chunk(
 
     raw_waveform = await run_blocking(audio_utils.bytes_to_full_waveform, wav_bytes)
 
-    # VAD: skip chunks with no speech (saves ~1-2s per silent chunk)
-    rms = float(raw_waveform.pow(2).mean().sqrt())
-    if rms < 0.005:
+    # Use speech VAD rather than a fixed RMS cutoff. Quiet speech can be
+    # emotionally meaningful; an absolute loudness gate disproportionately
+    # discarded low-volume turns (including sad delivery).
+    if not await run_blocking(stt.has_speech, raw_waveform):
         return {"transcript": "", "emotion": None, "timestamp": time.time(), "silent": True}
 
     # Transcription and speaker embedding are independent and can run together.

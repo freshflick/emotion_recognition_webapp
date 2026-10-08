@@ -77,13 +77,13 @@ FUSION_MODEL_CHECKPOINT = os.getenv(
 # --- Emotion inference calibration -----------------------------------------
 # Give acoustic delivery a little more influence in the learned fusion gate.
 # These are inference-time calibration controls, not new trained weights.
-AUDIO_MODALITY_BOOST = float(os.getenv("AUDIO_MODALITY_BOOST", "2.5"))
+AUDIO_MODALITY_BOOST = float(os.getenv("AUDIO_MODALITY_BOOST", "1.0"))
 USE_TEXT_EMOTION_FALLBACK = _flag("USE_TEXT_EMOTION_FALLBACK", "false")
-EMOTION2VEC_CLASSIFIER_BLEND = float(os.getenv("EMOTION2VEC_CLASSIFIER_BLEND", "0.35"))
+EMOTION2VEC_CLASSIFIER_BLEND = float(os.getenv("EMOTION2VEC_CLASSIFIER_BLEND", "0.8"))
 # Additive logit adjustments in [Neutral, Happy, Sad, Angry, Frustrated] order.
 # Frustrated is reduced with Angry because the UI combines those two labels.
 NEUTRAL_LOGIT_ADJUSTMENT = float(os.getenv("NEUTRAL_LOGIT_ADJUSTMENT", "-0.15"))
-ANGRY_LOGIT_ADJUSTMENT = float(os.getenv("ANGRY_LOGIT_ADJUSTMENT", "-0.15"))
+ANGRY_LOGIT_ADJUSTMENT = float(os.getenv("ANGRY_LOGIT_ADJUSTMENT", "-0.25"))
 FRUSTRATED_LOGIT_ADJUSTMENT = float(os.getenv("FRUSTRATED_LOGIT_ADJUSTMENT", "-0.10"))
 
 import multiprocessing

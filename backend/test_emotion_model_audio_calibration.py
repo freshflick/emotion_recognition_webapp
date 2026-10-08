@@ -17,7 +17,7 @@ class AudioCalibrationTests(unittest.TestCase):
         biases = _build_inference_biases([0.0] * 5, "cpu")
         self.assertTrue(torch.allclose(
             biases,
-            torch.tensor([-0.15, 0.0, 0.0, -0.15, -0.10]),
+            torch.tensor([-0.15, 0.0, 0.0, -0.25, -0.10]),
             atol=1e-6,
         ))
 
@@ -48,6 +48,13 @@ class AudioCalibrationTests(unittest.TestCase):
         )
         self.assertAlmostEqual(weight, 0.20)
         self.assertAlmostEqual(float(final.sum()), 1.0, places=6)
+
+    def test_confident_audio_sad_prediction_overrides_loudness_biased_angry_fusion(self):
+        fused = np.asarray([0.01, 0.01, 0.01, 0.97, 0.0], dtype=np.float32)
+        audio_sad = np.asarray([0.0, 0.0, 1.0, 0.0], dtype=np.float32)
+        final, weight = _blend_audio_classifier(fused, audio_sad, 1.0, 0.8)
+        self.assertAlmostEqual(weight, 0.8)
+        self.assertGreater(float(final[2]), float(final[3] + final[4]))
 
 
 if __name__ == "__main__":

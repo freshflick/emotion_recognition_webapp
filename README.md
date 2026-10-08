@@ -184,7 +184,7 @@ simulates speech rejection, window splitting, speaker attribution, or streaming.
 | `no_keyword_fallback` | Same as baseline | 2.0 | Disabled |
 | `raw_no_fallback` | Raw decoded audio, padded only | 2.0 | Disabled |
 | `raw_learned_gate` | Raw decoded audio, padded only | 1.0 | Disabled |
-| `audio_focused` | Raw decoded audio, padded only | 2.5 | Disabled; blends the native Emotion2Vec audio head at 0.35 |
+| `audio_focused` | Raw decoded audio, padded only | 1.0 | Disabled; blends the native Emotion2Vec audio head at 0.8 |
 
 `raw_learned_gate` names a comparison using the existing learned fusion gate,
 not a newly trained gate. The report prints JSON and optionally writes the same
@@ -202,9 +202,9 @@ separate from any clips used for tuning preprocessing, biases, or thresholds;
 do not tune repeatedly on the holdout and call the result independent evidence.
 
 Production inference preserves the decoded waveform for Emotion2Vec, disables
-keyword-based emotion replacement, uses an audio modality boost of 2.5, and
-blends the pretrained Emotion2Vec emotion head with the existing fusion output
-at 0.35. The blend is reduced when Emotion2Vec assigns much probability to
+keyword-based emotion replacement, leaves the learned audio/text gate unboosted,
+and blends the pretrained Emotion2Vec emotion head with the existing fusion output
+at 0.8. The blend is reduced when Emotion2Vec assigns much probability to
 unsupported categories. Neutral, Angry, and Frustrated receive small negative
 logit adjustments; Angry and Frustrated are both adjusted because the UI combines
 them. These are initial configurable settings, not weights calibrated on an
@@ -434,10 +434,10 @@ permissions, live captions, finalization, and saved reports in the browser.
 | `UPLOAD_WINDOW_SECONDS` | `4.0`; subject-enrolled upload windows |
 | `MAX_UTTERANCE_SECS` / `MIN_UTTERANCE_SECS` | `12.0` / `0.6`; live turn bounds |
 | `MAX_LIVE_SESSION_SECS` | `1500`; live WebSocket closes cleanly at 25 minutes, before Modal's 30-minute request timeout |
-| `AUDIO_MODALITY_BOOST` | `2.5`; scales the learned fusion gate toward the audio modality |
-| `EMOTION2VEC_CLASSIFIER_BLEND` | `0.35`; blends Emotion2Vec's native four-class projection into the app's fused result |
+| `AUDIO_MODALITY_BOOST` | `1.0`; leaves the learned audio/text gate unboosted |
+| `EMOTION2VEC_CLASSIFIER_BLEND` | `0.8`; gives Emotion2Vec's native four-class projection most of the final blend |
 | `USE_TEXT_EMOTION_FALLBACK` | `false`; keyword fallback is opt-in |
-| `NEUTRAL_LOGIT_ADJUSTMENT` / `ANGRY_LOGIT_ADJUSTMENT` / `FRUSTRATED_LOGIT_ADJUSTMENT` | `-0.15` / `-0.15` / `-0.10`; small additive inference calibration |
+| `NEUTRAL_LOGIT_ADJUSTMENT` / `ANGRY_LOGIT_ADJUSTMENT` / `FRUSTRATED_LOGIT_ADJUSTMENT` | `-0.15` / `-0.25` / `-0.10`; small additive inference calibration |
 | `PREVIEW_INTERVAL_SECS` / `PREVIEW_MIN_SECS` | `0.8` / `0.5`; preview timing |
 | `INFERENCE_WORKERS` | CPU count capped at four |
 

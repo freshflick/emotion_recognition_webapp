@@ -13,7 +13,7 @@ VARIANTS = {
     "no_keyword_fallback": (2.0, False, 0.0),
     "raw_no_fallback": (2.0, False, 0.0),
     "raw_learned_gate": (1.0, False, 0.0),
-    "audio_focused": (2.5, False, 0.35),
+    "audio_focused": (1.0, False, 0.8),
 }
 
 

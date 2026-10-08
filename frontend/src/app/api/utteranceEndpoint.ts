@@ -29,18 +29,21 @@ const SPEECH_END_SILENCE_MS = 1000;
  * Energy gate for "someone is talking", as a multiple of the measured noise
  * floor. 3x sits above steady room tone and HVAC hum but below a real voice.
  */
-const SPEECH_FLOOR_MULTIPLE = 3;
+const SPEECH_FLOOR_MULTIPLE = 2;
 
 /**
  * Never let the gate fall below this. Protects against a dead-mic reading of
  * pure zeros, where the adaptive floor has nothing to track and every sample
  * would look infinitely loud.
  */
-const MIN_ABSOLUTE_RMS = 0.004;
+const MIN_ABSOLUTE_RMS = 0.0015;
+
+/** Start low so quiet speech is not learned as background before the first turn. */
+const INITIAL_NOISE_FLOOR_RMS = 0.00075;
 
 /** Ceiling on the estimated floor, so a burst of shouting can't desensitise
  *  the gate for the rest of the session. */
-const MAX_FLOOR_RMS = 0.05;
+const MAX_FLOOR_RMS = 0.00175;
 
 /** A frame is only classified once we've seen enough history to trust it.
  *  2s of audio — long enough to characterise the room, short enough that the
@@ -62,7 +65,7 @@ export type UtteranceEvent =
   | { kind: "max" };
 
 export class UtteranceEndpoint {
-  private noiseFloor = MIN_ABSOLUTE_RMS;
+  private noiseFloor = INITIAL_NOISE_FLOOR_RMS;
   private framesSeen = 0;
   /** Whether this instant is loud enough to count as speech. Drives the UI. */
   private speaking = false;

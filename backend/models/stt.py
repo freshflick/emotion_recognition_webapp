@@ -6,8 +6,6 @@ inside a thread pool executor, never awaited directly.
 """
 import random
 import tempfile
-import struct
-import io
 
 from config import DEVICE, WHISPER_MODEL_SIZE, WHISPER_PREVIEW_MODEL_SIZE
 
@@ -89,19 +87,13 @@ def transcribe(
     if model is None:
         raise RuntimeError("Whisper model not loaded — call load_model() at startup")
 
-    # Quick silence check: compute RMS energy from raw PCM
-    # WAV header is 44 bytes, rest is PCM16 samples
+    # Reject buffers that cannot contain a speech turn. Avoid absolute volume
+    # cutoffs here: quiet emotional speech can have low PCM energy, and Whisper's
+    # VAD plus the segment confidence checks below already reject silence/noise.
     if len(audio_bytes) > 44:
-        pcm = audio_bytes[44:]
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
-        if samples:
-            rms = (sum(s*s for s in samples) / len(samples)) ** 0.5
-            if rms < 100:  # raise threshold to catch more noise
-                return ""
-            # Also reject very short audio (< 0.5s) — likely noise
-            duration = len(samples) / 16000
-            if duration < 0.5:
-                return ""
+        pcm_sample_count = (len(audio_bytes) - 44) // 2
+        if pcm_sample_count / 16000 < 0.5:
+            return ""
 
     with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
         tmp.write(audio_bytes)

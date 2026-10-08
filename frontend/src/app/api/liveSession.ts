@@ -40,9 +40,8 @@ registerProcessor('pcm-tap', PcmTap);
 function floatToPcm16(input: Float32Array): ArrayBuffer {
   const out = new Int16Array(input.length);
   for (let i = 0; i < input.length; i++) {
-    // getUserMedia already applies automatic gain control. Normalising each
-    // worklet frame independently amplifies room noise and destabilises both
-    // speaker embeddings and emotion cues.
+    // Keep each sample's original level. Per-frame normalization would amplify
+    // room noise and erase the delivery dynamics used by emotion recognition.
     const s = Math.max(-1, Math.min(1, input[i]));
     out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
@@ -186,9 +185,9 @@ export class LiveSession {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
       },
     });
     this.cb.onLatency?.({
