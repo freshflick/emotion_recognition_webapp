@@ -53,6 +53,7 @@ from config import (
     INFERENCE_WORKERS,
     MAX_AUDIO_SAMPLES,
     MAX_UTTERANCE_SECS,
+    MAX_LIVE_SESSION_SECS,
     MIN_UTTERANCE_SECS,
     PREVIEW_INTERVAL_SECS,
     PREVIEW_MIN_SECS,
@@ -87,6 +88,11 @@ def _bounded_int(value, default: int, minimum: int, maximum: int) -> int:
 async def run_blocking(fn, *args):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(executor, fn, *args)
+
+
+def shutdown_executor():
+    """Drain worker threads during FastAPI lifespan shutdown."""
+    executor.shutdown(wait=True, cancel_futures=True)
 
 
 async def process_chunk(
@@ -156,13 +162,9 @@ async def process_chunk(
             "isSubject": False,
         }
 
+    # Keep the decoded waveform's natural loudness and prosody for emotion
+    # inference. Hard gating/compression/high-pass processing can erase cues.
     waveform = audio_utils.pad_or_truncate(raw_waveform)
-
-    # Noise gate: zero out samples below threshold to reduce background noise
-    waveform = audio_utils.noise_gate(waveform, threshold=0.01)
-
-    # Enhance audio: compress dynamic range, normalize, high-pass filter
-    waveform = audio_utils.enhance_audio(waveform)
 
     # Emotion inference needs the completed transcript for audio-text fusion.
     emotion_result = await run_blocking(emotion_model.predict, waveform, transcript)
@@ -202,10 +204,11 @@ def _summarise(readings: list[dict]) -> dict:
 
 async def handle_audio_session(websocket: WebSocket):
     await websocket.accept()
+    deadline = time.monotonic() + MAX_LIVE_SESSION_SECS
 
     # --- 1. Auth handshake (first message must be JSON carrying the JWT) ---
     try:
-        auth_msg = await websocket.receive_json()
+        auth_msg = await asyncio.wait_for(websocket.receive_json(), timeout=15.0)
     except Exception:
         await websocket.close(code=4000, reason="Expected JSON auth message first")
         return
@@ -505,7 +508,23 @@ async def handle_audio_session(websocket: WebSocket):
 
     try:
         while True:
-            message = await websocket.receive()
+            remaining = deadline - time.monotonic()
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive(), timeout=max(0.001, remaining)
+                )
+            except asyncio.TimeoutError:
+                # Flush any complete final turn, then close well before Modal's
+                # hard timeout instead of leaving its request loop to be killed.
+                try:
+                    await flush(force=True)
+                    await websocket.close(
+                        code=4008,
+                        reason="Live session reached its 25-minute limit.",
+                    )
+                except Exception:
+                    pass
+                break
 
             if message["type"] == "websocket.disconnect":
                 break
@@ -653,10 +672,15 @@ async def handle_audio_session(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        if preview_task is not None and not preview_task.done():
-            preview_task.cancel()
-        if partial_preview_task is not None and not partial_preview_task.done():
-            partial_preview_task.cancel()
+        pending_tasks = [
+            task
+            for task in (preview_task, partial_preview_task)
+            if task is not None and not task.done()
+        ]
+        for task in pending_tasks:
+            task.cancel()
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
         report_id = None
         # Only persist sessions explicitly ended by Stop & Save. Navigating
         # away closes the socket without `action: end` and must discard it.

@@ -126,6 +126,90 @@ To test model loading directly, from `backend/` with the environment activated:
 python test_model_loads.py /path/to/clip.wav
 ```
 
+### Offline Emotion Evaluation
+
+`backend/evaluate_emotions.py` is a labeled-audio evaluation tool, not an
+API endpoint. It compares the previous pipeline with an audio-focused candidate;
+the tool does not train or automatically promote variants.
+It requires real inference dependencies, ffmpeg, the matching checkpoint, and
+`emotion_model.predict` with configurable audio fusion parameters. It refuses
+mock mode. Help needs no models:
+
+```bash
+python backend/evaluate_emotions.py --help
+# Run from backend/ with the real-inference environment above activated:
+cd backend
+USE_MOCK_MODEL=false python evaluate_emotions.py /data/holdout/manifest.csv --samples-per-class 3 --output /data/upload-evaluation.json
+USE_MOCK_MODEL=false python evaluate_emotions.py /data/holdout/manifest.csv --pipeline live --output /data/live-evaluation.json
+```
+
+The default is three evenly spaced clips per class (12 total); use
+`--samples-per-class` to select between one and ten per class. The Modal runner
+has a 20-minute timeout to prevent an oversized evaluation from lingering.
+
+The CSV requires `path,label` headers; `transcript` is optional. Relative audio
+paths resolve from the CSV's directory, not the working directory. Each row must
+be one single utterance in a complete decodable audio file, nonempty and at most
+eight seconds. Longer files fail evaluation rather than being silently truncated;
+utterance boundaries and ground-truth labels are the curator's responsibility.
+
+```csv
+path,label,transcript
+clips/neutral.wav,Neutral,Let me explain the next step
+clips/happy.wav,Happy,I'm pleased with how this turned out
+clips/sad.wav,Sad,This has been a difficult week
+clips/angry.wav,Angry,That's not what we agreed on
+clips/frustrated.wav,Frustrated,This keeps happening
+```
+
+Labels are case-sensitive: `Neutral`, `Happy`, `Sad`, `Angry`, `Frustrated`.
+Evaluation uses the **four UI categories**, explicitly mapping ground truth and
+predicted `Frustrated` to `Angry`. Four-label or five-label manifests are accepted;
+full coverage means all four mapped categories, not all five backend labels.
+Predictions map the backend's top label (they do not reselect the winner after
+merging scores). JSON includes original five-class scores and four-class scores
+with Angry and Frustrated summed.
+
+All variants share each row's supplied nonblank transcript, or one STT pass on
+the original decoded, unenhanced and unpadded audio. This controls transcription
+differences; it is not a full end-to-end upload/live benchmark. The default
+`--pipeline upload` baseline enhances then pads, matching a single normal upload
+window without subject enrollment. `--pipeline live` pads, noise-gates at 0.01,
+then enhances, matching completed-turn emotion preprocessing. Neither mode
+simulates speech rejection, window splitting, speaker attribution, or streaming.
+
+| Paired variant | Audio preprocessing | Audio boost | Keyword fallback |
+| --- | --- | --- | --- |
+| `baseline` | Selected upload/live pipeline | 2.0 | Enabled |
+| `no_keyword_fallback` | Same as baseline | 2.0 | Disabled |
+| `raw_no_fallback` | Raw decoded audio, padded only | 2.0 | Disabled |
+| `raw_learned_gate` | Raw decoded audio, padded only | 1.0 | Disabled |
+| `audio_focused` | Raw decoded audio, padded only | 2.5 | Disabled; blends the native Emotion2Vec audio head at 0.35 |
+
+`raw_learned_gate` names a comparison using the existing learned fusion gate,
+not a newly trained gate. The report prints JSON and optionally writes the same
+report to `--output` (its parent directory must exist). It contains counts,
+accuracy, per-class recall, macro recall over observed classes, all predictions
+and scores, and baseline-correct/candidate-wrong regressions with path, expected,
+baseline, and candidate labels. Missing-class recall is `null`.
+
+A variant is listed in `candidate_only` only with complete four-class coverage,
+strictly higher macro recall, strictly higher Happy and Sad recalls, and no class
+recall decrease against the paired baseline. Incomplete coverage is diagnostic
+only and never qualifies a recommendation. Passing is observed evidence on this
+dataset, not a general guarantee or automatic promotion. Keep a labeled holdout
+separate from any clips used for tuning preprocessing, biases, or thresholds;
+do not tune repeatedly on the holdout and call the result independent evidence.
+
+Production inference preserves the decoded waveform for Emotion2Vec, disables
+keyword-based emotion replacement, uses an audio modality boost of 2.5, and
+blends the pretrained Emotion2Vec emotion head with the existing fusion output
+at 0.35. The blend is reduced when Emotion2Vec assigns much probability to
+unsupported categories. Neutral, Angry, and Frustrated receive small negative
+logit adjustments; Angry and Frustrated are both adjusted because the UI combines
+them. These are initial configurable settings, not weights calibrated on an
+independent holdout. The enhancement function remains available for comparison.
+
 ### Frontend
 
 In terminal 2, from the repository root:
@@ -349,6 +433,11 @@ permissions, live captions, finalization, and saved reports in the browser.
 | `SUBJECT_MATCH_SIMILARITY` | `0.45`; subject embedding similarity cutoff |
 | `UPLOAD_WINDOW_SECONDS` | `4.0`; subject-enrolled upload windows |
 | `MAX_UTTERANCE_SECS` / `MIN_UTTERANCE_SECS` | `12.0` / `0.6`; live turn bounds |
+| `MAX_LIVE_SESSION_SECS` | `1500`; live WebSocket closes cleanly at 25 minutes, before Modal's 30-minute request timeout |
+| `AUDIO_MODALITY_BOOST` | `2.5`; scales the learned fusion gate toward the audio modality |
+| `EMOTION2VEC_CLASSIFIER_BLEND` | `0.35`; blends Emotion2Vec's native four-class projection into the app's fused result |
+| `USE_TEXT_EMOTION_FALLBACK` | `false`; keyword fallback is opt-in |
+| `NEUTRAL_LOGIT_ADJUSTMENT` / `ANGRY_LOGIT_ADJUSTMENT` / `FRUSTRATED_LOGIT_ADJUSTMENT` | `-0.15` / `-0.15` / `-0.10`; small additive inference calibration |
 | `PREVIEW_INTERVAL_SECS` / `PREVIEW_MIN_SECS` | `0.8` / `0.5`; preview timing |
 | `INFERENCE_WORKERS` | CPU count capped at four |
 

@@ -23,7 +23,7 @@ from config import (
 from models import audio_utils, emotion_model, stt
 from models.speaker_diarization import OnlineSpeakerDiarizer
 from storage import get_user_reports, save_session_report, upload_audio_file
-from websocket_handler import handle_audio_session, run_blocking
+from websocket_handler import handle_audio_session, run_blocking, shutdown_executor
 
 # Uploads larger than this are rejected before being read into memory.
 # Mirrors the "Max 50 MB" the upload UI advertises.
@@ -105,7 +105,10 @@ async def lifespan(app: FastAPI):
             "will not be saved or listed."
         )
 
-    yield
+    try:
+        yield
+    finally:
+        shutdown_executor()
 
 
 app = FastAPI(title="Emotion Monitoring API", lifespan=lifespan)
@@ -296,7 +299,10 @@ async def analyze_file(
         if not seg_transcript.strip():
             continue
 
-        analysed_window = audio_utils.pad_or_truncate(audio_utils.enhance_audio(window))
+        # Emotion2Vec was trained on ordinary decoded waveforms. Preserve the
+        # original loudness/prosody instead of compressing, peak-normalizing,
+        # and high-pass filtering the emotion input.
+        analysed_window = audio_utils.pad_or_truncate(window)
         seg_emotion = await run_blocking(
             emotion_model.predict, analysed_window, seg_transcript
         )

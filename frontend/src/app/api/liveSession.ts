@@ -87,6 +87,8 @@ export interface LiveSessionCallbacks {
   onPreviewDone?: () => void;
   onSummary?: (msg: Extract<LiveServerMessage, { type: "summary" }>) => void;
   onError?: (message: string) => void;
+  /** Unexpected server close after the session connected. */
+  onDisconnected?: (reason: string) => void;
   /** Fires with the current input level (0..1) for the waveform display. */
   onLevel?: (level: number) => void;
   /**
@@ -473,6 +475,10 @@ export class LiveSession {
                 : "Live session closed before it started.",
             ),
           );
+        } else if (!this.closed) {
+          const reason = e.reason || "The live analysis connection closed.";
+          this.teardown();
+          this.cb.onDisconnected?.(reason);
         }
       };
     });

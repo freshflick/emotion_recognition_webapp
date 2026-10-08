@@ -299,6 +299,7 @@ export function LiveRecording() {
   const [viewedSession, setViewedSession] = useState<Session | null>(null);
 
   const sessionRef = useRef<LiveSession | null>(null);
+  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
   const lastPreviewErrorRef = useRef<{ message: string; at: number } | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -462,6 +463,10 @@ export function LiveRecording() {
         if (previous && previous.message === message && now - previous.at < 2000) return;
         lastPreviewErrorRef.current = { message, at: now };
         toast.error(message);
+      },
+      onDisconnected: (reason) => {
+        toast.error(`${reason} Saving the results available in this browser.`);
+        void stopRecordingRef.current?.();
       },
     }, expectedSpeakers);
 
@@ -645,6 +650,7 @@ export function LiveRecording() {
     }
     setTimeout(() => navigate("/analytics"), 1500);
   };
+  stopRecordingRef.current = stopRecording;
 
   const chartData = emotionData.slice(-20).map((data) => ({
     time: `${data.timestamp}s`,

@@ -74,6 +74,18 @@ FUSION_MODEL_CHECKPOINT = os.getenv(
     "FUSION_MODEL_CHECKPOINT", "checkpoints/iemocap_e2v_large_model.pt"
 )
 
+# --- Emotion inference calibration -----------------------------------------
+# Give acoustic delivery a little more influence in the learned fusion gate.
+# These are inference-time calibration controls, not new trained weights.
+AUDIO_MODALITY_BOOST = float(os.getenv("AUDIO_MODALITY_BOOST", "2.5"))
+USE_TEXT_EMOTION_FALLBACK = _flag("USE_TEXT_EMOTION_FALLBACK", "false")
+EMOTION2VEC_CLASSIFIER_BLEND = float(os.getenv("EMOTION2VEC_CLASSIFIER_BLEND", "0.35"))
+# Additive logit adjustments in [Neutral, Happy, Sad, Angry, Frustrated] order.
+# Frustrated is reduced with Angry because the UI combines those two labels.
+NEUTRAL_LOGIT_ADJUSTMENT = float(os.getenv("NEUTRAL_LOGIT_ADJUSTMENT", "-0.15"))
+ANGRY_LOGIT_ADJUSTMENT = float(os.getenv("ANGRY_LOGIT_ADJUSTMENT", "-0.15"))
+FRUSTRATED_LOGIT_ADJUSTMENT = float(os.getenv("FRUSTRATED_LOGIT_ADJUSTMENT", "-0.10"))
+
 import multiprocessing
 
 # --- Runtime ---
@@ -96,6 +108,9 @@ MAX_AUDIO_SAMPLES = SAMPLE_RATE * MAX_AUDIO_SECS
 # these decide how often the model runs during a live session.
 MAX_UTTERANCE_SECS = float(os.getenv("MAX_UTTERANCE_SECS", "12.0"))
 MIN_UTTERANCE_SECS = float(os.getenv("MIN_UTTERANCE_SECS", "0.6"))
+# Modal's live WebSocket invocation has a 30-minute hard timeout. End sessions
+# cleanly before that limit so an abandoned connection is not killed mid-loop.
+MAX_LIVE_SESSION_SECS = float(os.getenv("MAX_LIVE_SESSION_SECS", "1500"))
 
 # Rolling emotion previews keep the live card responsive while a sentence is
 # still being spoken. They are provisional and never enter the saved report.
