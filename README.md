@@ -432,7 +432,7 @@ permissions, live captions, finalization, and saved reports in the browser.
 | `SPEAKER_MODEL_NAME` | `speechbrain/spkrec-ecapa-voxceleb` |
 | `SUBJECT_MATCH_SIMILARITY` | `0.45`; subject embedding similarity cutoff |
 | `UPLOAD_WINDOW_SECONDS` | `4.0`; subject-enrolled upload windows |
-| `MAX_UTTERANCE_SECS` / `MIN_UTTERANCE_SECS` | `12.0` / `0.6`; live turn bounds |
+| `MAX_UTTERANCE_SECS` / `MIN_UTTERANCE_SECS` | `2.0` / `0.6`; live analysis chunk bounds |
 | `MAX_LIVE_SESSION_SECS` | `1500`; live WebSocket closes cleanly at 25 minutes, before Modal's 30-minute request timeout |
 | `AUDIO_MODALITY_BOOST` | `1.0`; leaves the learned audio/text gate unboosted |
 | `EMOTION2VEC_CLASSIFIER_BLEND` | `0.8`; gives Emotion2Vec's native four-class projection most of the final blend |

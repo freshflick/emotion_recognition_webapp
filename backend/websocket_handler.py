@@ -434,15 +434,10 @@ async def handle_audio_session(websocket: WebSocket):
                 await websocket.send_json({"type": "flush_done"})
             return
 
-        # A silence-triggered flush includes the trailing pause, which would
-        # otherwise dilute both the VAD check and the speaker embedding. Trim
-        # it off; the audio is still sent to Whisper via the asr tail.
-        if force and len(audio_buffer) > MIN_UTTERANCE_BYTES:
-            trailing_silence = int(0.35 * SAMPLE_RATE * 2)
-            keep = max(MIN_UTTERANCE_BYTES, len(audio_buffer) - trailing_silence)
-            chunk_bytes = bytes(audio_buffer[:keep])
-        else:
-            chunk_bytes = bytes(audio_buffer)
+        # The client forwards speech plus at most a short pause tail. Do not
+        # trim a fixed amount here: the tail is bounded and trimming could cut
+        # off a quiet final syllable.
+        chunk_bytes = bytes(audio_buffer)
         audio_buffer = bytearray()
 
         # Give Whisper 0.75s of previous audio so words split by a chunk

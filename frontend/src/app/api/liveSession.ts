@@ -23,6 +23,7 @@ import { UtteranceEndpoint } from "./utteranceEndpoint";
 import type { LiveServerMessage } from "./types";
 
 const TARGET_SAMPLE_RATE = 16000;
+const MAX_FORWARDED_SILENCE_BYTES = TARGET_SAMPLE_RATE * 2 * 0.25;
 
 /** Worklet source, inlined as a blob so there's no separate asset to serve. */
 const WORKLET_SOURCE = `
@@ -120,10 +121,12 @@ export class LiveSession {
   private closed = false;
   /** Bytes buffered since the last commit, mirroring the server's buffer. */
   private bytesPending = 0;
+  /** Keep a brief pause for natural phrase boundaries, then stop forwarding silence. */
+  private forwardedSilenceBytes = 0;
   /** Audio accumulated since the last rolling preview request. */
   private bytesSincePreview = 0;
   /** Ceiling from the server; a turn this long is committed regardless. */
-  private maxUtteranceBytes = 384000; // 12s, updated from server
+  private maxUtteranceBytes = 64000; // 2s, updated from server
   private previewIntervalBytes = 48000; // 1.5s at 16kHz PCM16
   private previewMinBytes = 28800; // 0.9s at 16kHz PCM16
   private previewInFlight = false;
@@ -231,6 +234,25 @@ export class LiveSession {
 
       if (this.ws?.readyState !== WebSocket.OPEN) return;
       const pcm = floatToPcm16(resample(samples, inputRate, TARGET_SAMPLE_RATE));
+      if (speaking) {
+        this.forwardedSilenceBytes = 0;
+      } else {
+        // Keep only a short tail after speech. After that, continue measuring
+        // the local mic level for turn boundaries but do not send or analyse
+        // silent frames on the server.
+        if (
+          this.bytesPending === 0 ||
+          this.forwardedSilenceBytes >= MAX_FORWARDED_SILENCE_BYTES
+        ) {
+          this.cb.onTurn?.({
+            speaking,
+            finalising: this.finalising,
+            meter: this.endpoint.meter,
+          });
+          return;
+        }
+        this.forwardedSilenceBytes += pcm.byteLength;
+      }
       this.ws.send(pcm);
       this.bytesPending += pcm.byteLength;
       this.bytesSincePreview += pcm.byteLength;
@@ -238,6 +260,7 @@ export class LiveSession {
       // Ask for a rolling estimate while speech is in progress. This does not
       // reset bytesPending: the final pause still commits the entire utterance.
       if (
+        speaking &&
         this.bytesSincePreview >= this.previewIntervalBytes &&
         this.bytesPending >= this.previewMinBytes &&
         !this.previewInFlight &&
@@ -279,6 +302,7 @@ export class LiveSession {
     this.finalising = true;
     this.bytesPending = 0;
     this.bytesSincePreview = 0;
+    this.forwardedSilenceBytes = 0;
     this.endpoint.reset();
     this.flushStartedAt = performance.now();
     this.ws.send(JSON.stringify({ action: "flush" }));
