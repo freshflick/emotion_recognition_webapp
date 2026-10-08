@@ -4,7 +4,8 @@ the browser). FastAPI is the only thing allowed to write final results —
 this keeps report integrity out of the client's hands.
 """
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from uuid import UUID
 
 from supabase import Client, create_client
 
@@ -98,19 +99,67 @@ def get_user_reports(user_id: str, limit: int = 50) -> list[dict]:
 
 def delete_user_reports(user_id: str, report_ids: list[str]) -> int:
     """
-    Delete the given reports, but only rows owned by this user — the
-    user_id filter is what keeps one user from deleting another's data.
-    Returns the number of rows deleted. No-op when persistence is off.
+    Delete owned reports and their uploaded audio objects from Supabase Storage.
+
+    Audio objects are removed before database rows. If Storage deletion fails,
+    the report rows remain so the caller can retry instead of leaving orphaned
+    files with no report path. Returns the number of rows deleted.
     """
     if not is_enabled() or not report_ids:
         return 0
 
+    # UUID columns reject local-only frontend IDs. Filter them before querying
+    # so a mixed selection of server and local sessions still deletes safely.
+    valid_ids = []
+    for report_id in report_ids:
+        try:
+            valid_ids.append(str(UUID(report_id)))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    if not valid_ids:
+        return 0
+
     client = get_client()
+    selected = (
+        client.table("emotion_reports")
+        .select("id,data")
+        .eq("user_id", user_id)
+        .in_("id", valid_ids)
+        .execute()
+    )
+    owned_rows = selected.data or []
+    if not owned_rows:
+        return 0
+
+    # Only remove paths created under this user's own storage prefix. This
+    # avoids trusting arbitrary JSON paths in the report row.
+    user_prefix = PurePosixPath(user_id)
+    audio_paths = []
+    for row in owned_rows:
+        report_data = row.get("data")
+        path = report_data.get("audio_path") if isinstance(report_data, dict) else None
+        if not isinstance(path, str) or not path:
+            continue
+        object_path = PurePosixPath(path)
+        if (
+            not object_path.is_absolute()
+            and object_path.parts
+            and object_path.parts[0] == user_prefix.name
+            and ".." not in object_path.parts
+        ):
+            audio_paths.append(str(object_path))
+
+    if audio_paths:
+        client.storage.from_("audio-uploads").remove(audio_paths)
+
+    owned_ids = [row["id"] for row in owned_rows if row.get("id")]
+    if not owned_ids:
+        return 0
     result = (
         client.table("emotion_reports")
         .delete()
         .eq("user_id", user_id)
-        .in_("id", report_ids)
+        .in_("id", owned_ids)
         .execute()
     )
     return len(result.data or [])
