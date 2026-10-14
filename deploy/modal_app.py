@@ -53,8 +53,9 @@ def control_api():
     volumes={"/models": MODEL_VOLUME},
     secrets=[modal.Secret.from_name("emotion-monitor-secrets")],
     timeout=1800,
-    # Keep the GPU container warm for brief gaps between test sessions.
-    scaledown_window=180,
+    # Keep the GPU container warm while the user navigates between pages or
+    # takes a short break, without holding an expensive GPU indefinitely.
+    scaledown_window=300,
 )
 @modal.concurrent(max_inputs=1)
 @modal.asgi_app()

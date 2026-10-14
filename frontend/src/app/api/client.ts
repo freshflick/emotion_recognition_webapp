@@ -83,6 +83,21 @@ export function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health", {}, CONTROL_ORIGIN);
 }
 
+// Starting this request wakes Modal's GPU-backed app and loads its models.
+// Keep it deduplicated because React StrictMode may mount effects twice in dev.
+let inferenceWarmup: Promise<void> | null = null;
+export function warmInferenceBackend(): Promise<void> {
+  if (!inferenceWarmup) {
+    inferenceWarmup = request<HealthResponse>("/api/health", {}, BACKEND_ORIGIN)
+      .then(() => undefined)
+      .catch((error) => {
+        inferenceWarmup = null;
+        throw error;
+      });
+  }
+  return inferenceWarmup;
+}
+
 export interface QuoteResponse {
   text: string;
   author: string;

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
-import { getHealth, verifyLabels } from "../api/client";
+import { getHealth, verifyLabels, warmInferenceBackend } from "../api/client";
 import { fetchSessions } from "../api/reports";
 import type { HealthResponse } from "../api/types";
 import { hydrateSessions } from "../utils/emotionEngine";
@@ -32,6 +32,13 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   // Health is public — checked regardless of auth so the UI can tell
   // "backend down" apart from "not signed in".
   useEffect(() => {
+    // Wake and initialize the GPU model as soon as the site shell opens. This
+    // runs independently of sign-in and report loading so both can proceed in
+    // parallel while the user is still entering the app.
+    void warmInferenceBackend().catch((err) => {
+      console.info("[startup] GPU warm-up will retry on first analysis:", err);
+    });
+
     getHealth()
       .then((h) => {
         setHealth(h);

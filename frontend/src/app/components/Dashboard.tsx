@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import {
     LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -10,8 +10,65 @@ import { useUser } from "../contexts/UserContext";
 import { getTimeBasedGreeting, getSessionQuote } from "../utils/userProfile";
 import { useSessionStore } from "../utils/emotionEngine";
 import type { Emotion } from "../utils/emotionEngine";
-import { SessionLoadingIndicator } from "./SessionLoadingIndicator";
 import { LoadingPanel } from "./LoadingPanel";
+import { useSessions } from "../contexts/SessionsContext";
+
+type DashboardStats = {
+    totalSessions: number;
+    totalDuration: number;
+    avgConfidence: number;
+    pieData: { name: string; value: number; color: string }[];
+    timelineData: { name: string; confidence: number }[];
+    trendData: Record<string, string | number>[];
+};
+
+function statsStorageKey(userId: string) {
+    return `emphona_dashboard_stats:${userId}`;
+}
+
+function readCachedStats(userId: string): DashboardStats | null {
+    try {
+        const value = localStorage.getItem(statsStorageKey(userId));
+        return value ? JSON.parse(value) as DashboardStats : null;
+    } catch {
+        return null;
+    }
+}
+
+function summarizeSessions(sessions: ReturnType<typeof useSessionStore>): DashboardStats {
+    const totalSessions = sessions.length;
+    const totalDuration = sessions.reduce((sum, session) => sum + session.duration, 0);
+    const avgConfidence = totalSessions > 0
+        ? sessions.reduce((sum, session) => sum + session.summary.averageConfidence, 0) / totalSessions
+        : 0;
+    const emotionDistribution: Record<Emotion, number> = { happy: 0, sad: 0, angry: 0, neutral: 0 };
+    sessions.forEach((session) => {
+        Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
+            emotionDistribution[emotion as Emotion] += value;
+        });
+    });
+    const sessionCount = totalSessions || 1;
+    const pieData = Object.entries(emotionDistribution)
+        .filter(([, value]) => value > 0)
+        .map(([emotion, value]) => ({
+            name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
+            value: value / sessionCount,
+            color: EMOTION_COLORS[emotion as Emotion],
+        }));
+    const timelineData = sessions.slice(0, 10).reverse().map((session, index) => ({
+        name: `S${index + 1}`,
+        confidence: parseFloat((session.summary.averageConfidence * 100).toFixed(1)),
+    }));
+    const trendData = sessions.slice(0, 8).reverse().map((session, index) => {
+        const data: Record<string, string | number> = { name: `S${index + 1}` };
+        Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
+            data[emotion] = parseFloat((value * 100).toFixed(1));
+        });
+        return data;
+    });
+
+    return { totalSessions, totalDuration, avgConfidence, pieData, timelineData, trendData };
+}
 
 const EMOTION_COLORS: { [key in Emotion]: string } = {
     happy: "#c07c20",
@@ -59,6 +116,11 @@ function StatBlock({
 export function Dashboard() {
     const { user } = useUser();
     const sessions = useSessionStore();
+    const { isLoadingSessions, sessionsError } = useSessions();
+    const [cachedStats, setCachedStats] = useState<{ userId: string; stats: DashboardStats | null }>(() => ({
+        userId: user.id,
+        stats: readCachedStats(user.id),
+    }));
     const [quote, setQuote] = useState<{ text: string; author: string } | null>(null);
     const [greeting] = useState(getTimeBasedGreeting());
 
@@ -76,44 +138,27 @@ export function Dashboard() {
         };
     }, []);
 
-    const totalSessions = sessions.length;
-    const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
-    const avgConfidence =
-        sessions.length > 0
-            ? sessions.reduce((sum, s) => sum + s.summary.averageConfidence, 0) / sessions.length
-            : 0;
+    useEffect(() => {
+        setCachedStats({ userId: user.id, stats: readCachedStats(user.id) });
+    }, [user.id]);
 
-    const emotionDistribution: { [key in Emotion]: number } = {
-        happy: 0, sad: 0, angry: 0, neutral: 0,
-    };
-    sessions.forEach((session) => {
-        Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
-            emotionDistribution[emotion as Emotion] += value;
-        });
-    });
+    const liveStats = useMemo(() => summarizeSessions(sessions), [sessions]);
+    useEffect(() => {
+        if (isLoadingSessions) return;
+        try {
+            localStorage.setItem(statsStorageKey(user.id), JSON.stringify(liveStats));
+            setCachedStats({ userId: user.id, stats: liveStats });
+        } catch {
+            // Dashboard remains usable if browser storage is unavailable/full.
+        }
+    }, [isLoadingSessions, liveStats, user.id]);
 
-    // Average across sessions, so this is a clean 0..1 fraction of "how much
-    // each emotion shows up across all sessions"
-    const sessionCount = sessions.length || 1;
-
-    const pieData = Object.entries(emotionDistribution).filter(([, value]) => value > 0).map(([emotion, value]) => ({
-        name: emotion.charAt(0).toUpperCase() + emotion.slice(1),
-        value: value / sessionCount,
-        color: EMOTION_COLORS[emotion as Emotion],
-    }));
-
-    const timelineData = sessions.slice(0, 10).reverse().map((session, index) => ({
-        name: `S${index + 1}`,
-        confidence: parseFloat((session.summary.averageConfidence * 100).toFixed(1)),
-    }));
-
-    const trendData = sessions.slice(0, 8).reverse().map((session, index) => {
-        const data: any = { name: `S${index + 1}` };
-        Object.entries(session.summary.emotionDistribution).forEach(([emotion, value]) => {
-            data[emotion] = parseFloat((value * 100).toFixed(1));
-        });
-        return data;
-    });
+    // Keep a small, account-scoped summary on this device. It contains only
+    // aggregate counts and chart points, so the dashboard can paint at once
+    // while the full report history is refreshed in the background.
+    const stats = sessions.length > 0 || !isLoadingSessions
+        ? liveStats
+        : cachedStats.userId === user.id ? cachedStats.stats : null;
 
     const tooltipStyle = {
         background: "var(--card)",
@@ -172,17 +217,22 @@ export function Dashboard() {
 
             </div>
 
-            <SessionLoadingIndicator>
+            {isLoadingSessions && !stats ? (
+                <LoadingPanel title="Loading your saved statistics" description="Your dashboard will appear as soon as the saved reports load." />
+            ) : (
+              <>
+            {isLoadingSessions && stats && <p className="mb-4 text-xs text-muted-foreground" role="status">Refreshing your saved statistics…</p>}
+            {sessionsError && <p className="mb-4 text-xs text-muted-foreground" role="status">Showing your last saved statistics. {sessionsError}</p>}
 
             {/* At-a-glance signal strip */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-px mb-10 border" style={{ borderColor: "var(--border)", backgroundColor: "var(--border)" }}>
-                <div className="bg-background p-5"><StatBlock label="Sessions" value={totalSessions} sub="All time" /></div>
-                <div className="bg-background p-5"><StatBlock label="Listening time" value={`${Math.round(totalDuration / 60)}m`} sub="Analyzed audio" /></div>
-                <div className="bg-background p-5"><StatBlock label="Signal confidence" value={`${(avgConfidence * 100).toFixed(1)}%`} sub="Average model confidence" /></div>
+                <div className="bg-background p-5"><StatBlock label="Sessions" value={stats?.totalSessions ?? 0} sub="All time" /></div>
+                <div className="bg-background p-5"><StatBlock label="Listening time" value={`${Math.round((stats?.totalDuration ?? 0) / 60)}m`} sub="Analyzed audio" /></div>
+                <div className="bg-background p-5"><StatBlock label="Signal confidence" value={`${((stats?.avgConfidence ?? 0) * 100).toFixed(1)}%`} sub="Average model confidence" /></div>
             </div>
 
             {/* Charts */}
-            {sessions.length === 0 ? (
+            {(stats?.totalSessions ?? 0) === 0 ? (
                 <div className="border py-20 text-center" style={{ borderColor: "var(--border)" }}>
                     <Brain
                         className="mx-auto mb-4 text-muted-foreground/40"
@@ -252,13 +302,13 @@ export function Dashboard() {
                                 <ResponsiveContainer width="100%" height={240}>
                                     <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
                                         <Pie
-                                            data={pieData}
+                                            data={stats?.pieData ?? []}
                                             cx="50%"
                                             cy="50%"
                                             outerRadius={80}
                                             dataKey="value"
                                         >
-                                            {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                                            {(stats?.pieData ?? []).map((entry, i) => <Cell key={i} fill={entry.color} />)}
                                         </Pie>
                                         <Legend
                                             verticalAlign="bottom"
@@ -284,7 +334,7 @@ export function Dashboard() {
                             </p>
                             <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                                 <ResponsiveContainer width="100%" height={240}>
-                                    <BarChart data={timelineData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                                    <BarChart data={stats?.timelineData ?? []} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
                                         <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                                         <XAxis dataKey="name" tick={axisStyle} />
                                         <YAxis domain={[0, 100]} tick={axisStyle} />
@@ -305,7 +355,7 @@ export function Dashboard() {
                             </p>
                             <div className="border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}>
                                 <ResponsiveContainer width="100%" height={240}>
-                                    <LineChart data={trendData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                                    <LineChart data={stats?.trendData ?? []} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
                                         <CartesianGrid vertical={false} strokeDasharray="2 2" stroke="var(--border)" />
                                         <XAxis dataKey="name" tick={axisStyle} />
                                         <YAxis domain={[0, 100]} tick={axisStyle} />
@@ -321,7 +371,8 @@ export function Dashboard() {
                     </div>
                 </div>
             )}
-            </SessionLoadingIndicator>
+              </>
+            )}
           </div>
         </div>
     );
