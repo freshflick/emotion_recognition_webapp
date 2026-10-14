@@ -721,10 +721,10 @@ export function LiveRecording() {
           {/* Results shown here are only as real as the backend serving them —
               say so plainly rather than letting placeholders look like data. */}
            {isCheckingHealth && <LoadingPanel title="Backend loading" description="Checking the analysis service connection. Please wait before starting a recording." />}
-           {(isSaving || isConnecting || isProcessing || enrollingSpeaker !== null) && (
+           {(isSaving || isConnecting || enrollingSpeaker !== null) && (
              <LoadingPanel
-               title={isSaving ? "Finalising and saving your recording" : isConnecting ? "Connecting to the model service" : enrollingSpeaker !== null ? "Preparing the speaker's voice profile" : "Analysing the latest speech"}
-               description={isSaving ? "Processing the final turn and saving your results before opening Analytics." : isConnecting ? "Preparing the microphone and GPU models. The first connection after an idle period may take longer." : enrollingSpeaker !== null ? "Speak during the countdown, then wait while your sample is processed." : "Transcribing the completed turn and computing its emotion prediction."}
+               title={isSaving ? "Finalising and saving your recording" : isConnecting ? "Connecting to the model service" : "Preparing the speaker's voice profile"}
+               description={isSaving ? "Processing the final turn and saving your results before opening Analytics." : isConnecting ? "Preparing the microphone and GPU models. The first connection after an idle period may take longer." : "Speak during the countdown, then wait while your sample is processed."}
              />
            )}
            {!isCheckingHealth && !backendReachable && (
