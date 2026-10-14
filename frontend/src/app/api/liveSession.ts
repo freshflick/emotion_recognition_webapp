@@ -128,7 +128,7 @@ export class LiveSession {
   /** Audio accumulated since the last rolling preview request. */
   private bytesSincePreview = 0;
   /** Ceiling from the server; a turn this long is committed regardless. */
-  private maxUtteranceBytes = 64000; // 2s, updated from server
+  private maxUtteranceBytes = TARGET_SAMPLE_RATE * 2 * 8; // 8s, updated from server
   private previewIntervalBytes = 48000; // 1.5s at 16kHz PCM16
   private previewMinBytes = 28800; // 0.9s at 16kHz PCM16
   private previewInFlight = false;

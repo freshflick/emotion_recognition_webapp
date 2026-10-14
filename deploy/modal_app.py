@@ -71,6 +71,9 @@ def fastapi_app():
     os.environ["FUSION_MODEL_CHECKPOINT"] = "/models/iemocap_e2v_large_model.pt"
     os.environ["USE_MOCK_MODEL"] = "false"
     os.environ["DISABLE_AUTH"] = "false"
+    # Avoid a stale Modal secret overriding the smoother sentence-sized live
+    # buffer. The inference model accepts at most eight seconds of audio.
+    os.environ["MAX_UTTERANCE_SECS"] = "8.0"
 
     sys.path.insert(0, "/app/backend")
     from main import app as fastapi_app_instance

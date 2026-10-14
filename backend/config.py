@@ -106,9 +106,9 @@ MAX_AUDIO_SAMPLES = SAMPLE_RATE * MAX_AUDIO_SECS
 # on near-silence, so analysing it would invent a reading.
 # Independent of MAX_AUDIO_SECS above: that is the model's fixed input window,
 # these decide how often the model runs during a live session.
-# Keep each live analysis window at or below two seconds, even if a deployment
-# still has the previous 12-second value configured in its environment.
-MAX_UTTERANCE_SECS = max(0.5, min(float(os.getenv("MAX_UTTERANCE_SECS", "2.0")), 2.0))
+# Let a sentence finish naturally; only split continuous speech at the model's
+# eight-second input limit. Ordinary pauses still close turns sooner.
+MAX_UTTERANCE_SECS = max(0.5, min(float(os.getenv("MAX_UTTERANCE_SECS", "8.0")), MAX_AUDIO_SECS))
 MIN_UTTERANCE_SECS = float(os.getenv("MIN_UTTERANCE_SECS", "0.6"))
 # Modal's live WebSocket invocation has a 30-minute hard timeout. End sessions
 # cleanly before that limit so an abandoned connection is not killed mid-loop.

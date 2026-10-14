@@ -22,8 +22,8 @@
  * `tick` for the reasoning.
  */
 
-/** Silence that ends a turn. Tuned to a sentence-boundary pause, not a breath. */
-const SPEECH_END_SILENCE_MS = 1000;
+/** A natural pause closes a turn, with enough room for a short breath. */
+const SPEECH_END_SILENCE_MS = 1200;
 
 /**
  * Energy gate for "someone is talking", as a multiple of the measured noise
