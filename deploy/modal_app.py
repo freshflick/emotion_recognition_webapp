@@ -53,8 +53,9 @@ def control_api():
     volumes={"/models": MODEL_VOLUME},
     secrets=[modal.Secret.from_name("emotion-monitor-secrets")],
     timeout=1800,
-    # Keep the GPU container warm while the user navigates between pages or
-    # takes a short break, without holding an expensive GPU indefinitely.
+    # Keep one GPU replica running continuously so inference is ready without
+    # waiting for a cold start. This incurs GPU charges while idle.
+    min_containers=1,
     scaledown_window=900,
 )
 @modal.concurrent(max_inputs=1)
