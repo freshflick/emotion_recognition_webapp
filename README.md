@@ -375,10 +375,10 @@ and mounts the model volume at `/models`. The volume also stores model caches.
 To choose a different GPU, use `MODAL_GPU=<gpu-name>` when deploying. Keep auth
 enabled in the shared secret because the CPU service uses that configuration.
 
-The GPU service keeps at least one container running continuously, so the model
-stays warm between requests. This incurs GPU charges while idle. Additional GPU
-containers can still scale down after 15 minutes; the CPU control service scales
-down after 60 seconds. Modal may replace a container after a failure or deploy.
+The GPU service stays warm for five minutes after the last request, then can
+scale down to zero; a later request may incur a cold start. The CPU control
+service scales down after 60 seconds. Modal may replace a container after a
+failure or deploy.
 Ordinary health, quote, and report requests use the CPU service to avoid waking
 the GPU. Configure workspace budgets and spending limits in Modal before use;
 GPU hosting is not unlimited free compute.
