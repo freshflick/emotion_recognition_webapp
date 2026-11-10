@@ -2,13 +2,11 @@ import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import {
     Activity, Mic, Upload, FileText, BarChart3, Settings,
-    LogOut, User, Clock, ChevronLeft, ChevronRight,
+    LogOut, User, Clock,
 } from "lucide-react";
 import { useUser } from "../contexts/UserContext";
 import { useAuth } from "../contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-
-const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
 const NAV_ITEMS = [
     { path: "/", label: "Dashboard", icon: Activity },
@@ -23,17 +21,6 @@ export function Root() {
     const navigate = useNavigate();
     const { user } = useUser();
     const { signOut } = useAuth();
-
-    const [collapsed, setCollapsed] = useState(
-        () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true"
-    );
-
-    const toggleCollapsed = () => {
-        setCollapsed((prev) => {
-            localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(!prev));
-            return !prev;
-        });
-    };
 
     // Live Date and Time State
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -66,56 +53,40 @@ export function Root() {
     return (
         <div className="flex min-h-screen bg-background">
             <aside
-                className="hidden lg:flex sticky top-0 h-screen self-start flex-shrink-0 flex-col border-r transition-all duration-200"
+                className="hidden lg:flex sticky top-0 h-screen w-64 self-start flex-shrink-0 flex-col border-r"
                 style={{
-                    width: collapsed ? 72 : 256,
                     borderColor: "var(--sidebar-border)",
                     backgroundColor: "var(--sidebar)",
                 }}
             >
                 {/* Masthead */}
                 <div
-                    className={`pt-6 pb-4 border-b flex items-center ${collapsed ? "justify-center px-2" : "justify-between pl-6 pr-3"}`}
+                    className="pt-6 pb-4 border-b flex items-center pl-6 pr-3"
                     style={{ borderColor: "var(--sidebar-border)" }}
                 >
-                    {!collapsed && (
-                        <div className="mb-1">
-                            <span className="text-xs tracking-[0.2em] uppercase block mb-1.5" style={{ color: "var(--sidebar-foreground)", opacity: 0.82, fontFamily: "'IBM Plex Sans', sans-serif" }}>
-                                — Est. 2026
-                            </span>
-                            <div className="text-2xl font-bold leading-tight" style={{ color: "var(--sidebar-foreground)", fontFamily: "'Playfair Display', Georgia, serif", letterSpacing: "-0.01em" }}>
-                                Emphona
-                            </div>
-                        </div>
-                    )}
-                    <button
-                        onClick={toggleCollapsed}
-                        className="p-1.5 rounded-md hover:bg-sidebar-accent/50 transition-colors flex-shrink-0"
-                        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                    >
-                        {collapsed ? (
-                            <ChevronRight style={{ width: 16, height: 16, color: "var(--sidebar-foreground)", opacity: 0.7 }} />
-                        ) : (
-                            <ChevronLeft style={{ width: 16, height: 16, color: "var(--sidebar-foreground)", opacity: 0.7 }} />
-                        )}
-                    </button>
-                </div>
-
-                {!collapsed && (
-                    <div className="pb-0">
-                        <p className="px-6 py-3 text-xs tracking-[0.08em] uppercase font-semibold leading-4" style={{ color: "var(--sidebar-foreground)", opacity: 0.86 }}>
-                            <span className="block">Fusion Model ·</span>
-                            <span className="block">Powered Analysis</span>
-                        </p>
-                        <div className="border-y px-6 py-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono" style={{ borderColor: "var(--sidebar-border)" }}>
-                                <span className="flex items-center gap-1.5 font-medium" style={{ color: "var(--sidebar-foreground)", opacity: 0.9 }}>
-                                 <Clock className="size-3" style={{ color: "var(--sidebar-primary)" }} />
-                                {formattedTime}
-                            </span>
-                            <span className="text-[10px] uppercase tracking-tight" style={{ color: "var(--sidebar-foreground)", opacity: 0.72 }}>{formattedDate}</span>
+                    <div className="mb-1">
+                        <span className="text-xs tracking-[0.2em] uppercase block mb-1.5" style={{ color: "var(--sidebar-foreground)", opacity: 0.82, fontFamily: "'IBM Plex Sans', sans-serif" }}>
+                            — Est. 2026
+                        </span>
+                        <div className="text-2xl font-bold leading-tight" style={{ color: "var(--sidebar-foreground)", fontFamily: "'Playfair Display', Georgia, serif", letterSpacing: "-0.01em" }}>
+                            Emphona
                         </div>
                     </div>
-                )}
+                </div>
+
+                <div className="pb-0">
+                    <p className="px-6 py-3 text-xs tracking-[0.08em] uppercase font-semibold leading-4" style={{ color: "var(--sidebar-foreground)", opacity: 0.86 }}>
+                        <span className="block">Fusion Model ·</span>
+                        <span className="block">Powered Analysis</span>
+                    </p>
+                    <div className="border-y px-6 py-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono" style={{ borderColor: "var(--sidebar-border)" }}>
+                            <span className="flex items-center gap-1.5 font-medium" style={{ color: "var(--sidebar-foreground)", opacity: 0.9 }}>
+                             <Clock className="size-3" style={{ color: "var(--sidebar-primary)" }} />
+                            {formattedTime}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-tight" style={{ color: "var(--sidebar-foreground)", opacity: 0.72 }}>{formattedDate}</span>
+                    </div>
+                </div>
 
                 {/* Navigation */}
                 <nav
@@ -128,8 +99,7 @@ export function Root() {
                             <Link
                                 key={item.path}
                                 to={item.path}
-                                title={collapsed ? item.label : undefined}
-                                className={`flex items-center gap-3 py-2.5 text-xs tracking-wide transition-colors relative group rounded-md hover:bg-sidebar-accent/50 ${collapsed ? "justify-center px-2" : "px-3"}`}
+                                className="flex items-center gap-3 py-2.5 px-3 text-xs tracking-wide transition-colors relative group rounded-md hover:bg-sidebar-accent/50"
                                 style={{
                                      color: active ? "var(--sidebar-foreground)" : "var(--sidebar-foreground)",
                                      backgroundColor: active ? "var(--sidebar-accent)" : "transparent",
@@ -151,18 +121,17 @@ export function Root() {
                                         opacity: active ? 1 : 0.7,
                                     }}
                                 />
-                                {!collapsed && <span>{item.label}</span>}
+                                <span>{item.label}</span>
                             </Link>
                         );
                     })}
                 </nav>
 
                 {/* User footer */}
-                <div className={`border-t py-4 space-y-1 ${collapsed ? "px-2" : "px-4"}`} style={{ borderColor: "var(--sidebar-border)" }}>
+                <div className="border-t py-4 px-4 space-y-1" style={{ borderColor: "var(--sidebar-border)" }}>
                     <Link
                         to="/profile"
-                        title={collapsed ? (user?.name || "Profile") : undefined}
-                        className={`flex items-center gap-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent/50 ${collapsed ? "justify-center px-2" : "px-2"}`}
+                        className="flex items-center gap-3 py-2 px-2 rounded-md transition-colors hover:bg-sidebar-accent/50"
                          style={{ color: "var(--sidebar-foreground)", opacity: location.pathname === "/profile" ? 1 : 0.88, fontFamily: "'IBM Plex Sans', sans-serif" }}
                     >
                         <Avatar className="size-7">
@@ -171,34 +140,28 @@ export function Root() {
                                 {user?.name?.charAt(0).toUpperCase() || "U"}
                             </AvatarFallback>
                         </Avatar>
-                        {!collapsed && (
-                            <>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-xs uppercase tracking-wider truncate font-semibold">{user?.name || "User"}</div>
-                                </div>
-                                <User style={{ width: 14, height: 14, opacity: 0.5 }} />
-                            </>
-                        )}
+                        <div className="flex-1 min-w-0">
+                            <div className="text-xs uppercase tracking-wider truncate font-semibold">{user?.name || "User"}</div>
+                        </div>
+                        <User style={{ width: 14, height: 14, opacity: 0.5 }} />
                     </Link>
 
                     <Link
                         to="/settings"
-                        title={collapsed ? "Settings" : undefined}
-                        className={`flex items-center gap-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent/50 ${collapsed ? "justify-center px-2" : "px-2"}`}
+                        className="flex items-center gap-3 py-2 px-2 rounded-md transition-colors hover:bg-sidebar-accent/50"
                          style={{ color: "var(--sidebar-foreground)", opacity: location.pathname === "/settings" ? 1 : 0.88, fontFamily: "'IBM Plex Sans', sans-serif" }}
                     >
                         <Settings style={{ width: 14, height: 14, opacity: 0.7 }} />
-                        {!collapsed && <span className="text-xs tracking-wider uppercase font-medium" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>Settings</span>}
+                        <span className="text-xs tracking-wider uppercase font-medium" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>Settings</span>
                     </Link>
 
                     <button
                         onClick={async () => { await signOut(); navigate("/login"); }}
-                        title={collapsed ? "Sign out" : undefined}
-                         className={`flex items-center gap-3 py-2 rounded-md text-xs font-medium uppercase tracking-wider hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all ${collapsed ? "justify-center px-2 w-full" : "px-2 w-full text-left"}`}
+                         className="flex items-center gap-3 py-2 px-2 w-full text-left rounded-md text-xs font-medium uppercase tracking-wider hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all"
                          style={{ color: "var(--sidebar-foreground)", opacity: 0.88 }}
                     >
                         <LogOut style={{ width: 14, height: 14 }} />
-                        {!collapsed && <span>Sign out</span>}
+                        <span>Sign out</span>
                     </button>
                 </div>
             </aside>
